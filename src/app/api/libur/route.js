@@ -11,12 +11,18 @@ export async function POST(req) {
   }
 
   const { target, waktu, tanggal } = await req.json();
-  if (!target || !waktu || !tanggal) {
-    return NextResponse.json({ error: 'target, waktu, dan tanggal wajib diisi' }, { status: 400 });
+  const isRekap = target === 'rekap';
+
+  if (!target || !tanggal || (!isRekap && !waktu)) {
+    return NextResponse.json({ error: `target, tanggal${isRekap ? '' : ', dan waktu'} wajib diisi` }, { status: 400 });
   }
 
-  const n8n = await triggerN8n(process.env.N8N_WEBHOOK_LIBUR, { target, waktu, tanggal });
-  await logAudit(auth.session, 'KIRIM_LIBUR', { target, waktu, tanggal });
+  // Shift libur (shiftA/B/C + waktu) pakai N8N_WEBHOOK_LIBUR.
+  // Rekap libur (ketiga shift libur sekaligus) pakai webhook terpisah N8N_WEBHOOK_LIBUR_REKAP.
+  const webhookUrl = isRekap ? process.env.N8N_WEBHOOK_LIBUR_REKAP : process.env.N8N_WEBHOOK_LIBUR;
+
+  const n8n = await triggerN8n(webhookUrl, { target, waktu: waktu || null, tanggal });
+  await logAudit(auth.session, 'KIRIM_LIBUR', { target, waktu: waktu || null, tanggal });
 
   if (!n8n.ok) {
     return NextResponse.json({ error: n8n.warn }, { status: 500 });

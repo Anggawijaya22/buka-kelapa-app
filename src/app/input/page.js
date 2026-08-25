@@ -3,6 +3,8 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Nav from '@/lib/Nav';
 
+const DISMISS_KEY = 'bk_dismissed_approvals';
+
 function todayDisplay() {
   const d = new Date();
   return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
@@ -13,25 +15,44 @@ function targetLabelSingkat(item) {
   return 'Shift ' + item.target.slice(-1) + (item.waktu ? ' (' + item.waktu.toUpperCase() + ')' : '');
 }
 
+function loadDismissed() {
+  try {
+    const raw = localStorage.getItem(DISMISS_KEY);
+    return new Set(raw ? JSON.parse(raw) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function saveDismissed(set) {
+  try {
+    localStorage.setItem(DISMISS_KEY, JSON.stringify([...set]));
+  } catch {}
+}
+
 function PengajuanSaya() {
   const [items, setItems] = useState([]);
-  const seenIdsRef = useRef(new Set());
+  const dismissedRef = useRef(new Set());
 
   async function load() {
     const res = await fetch('/api/approvals?mine=true');
     if (!res.ok) return;
     const d = await res.json();
-    // Hanya tampilkan yang belum "dibaca" (masih pending, atau rejected yang baru)
-    const relevant = (d.items || []).filter(it => it.status === 'pending' || (it.status === 'rejected' && !seenIdsRef.current.has(it.id)));
+    // Hanya tampilkan yang masih pending, atau rejected yang belum pernah ditutup
+    // (status "ditutup" disimpan permanen di localStorage, jadi tidak muncul lagi
+    // walau logout/login ulang atau reload halaman)
+    const relevant = (d.items || []).filter(it => it.status === 'pending' || (it.status === 'rejected' && !dismissedRef.current.has(it.id)));
     setItems(relevant);
   }
 
   function tutup(id) {
-    seenIdsRef.current.add(id);
+    dismissedRef.current.add(id);
+    saveDismissed(dismissedRef.current);
     setItems(prev => prev.filter(it => it.id !== id));
   }
 
   useEffect(() => {
+    dismissedRef.current = loadDismissed();
     load();
     const t = setInterval(load, 5000);
     return () => clearInterval(t);
@@ -65,6 +86,9 @@ export default function InputPage() {
   const [msg, setMsg] = useState({ type: '', text: '' });
   const [loading, setLoading] = useState(false);
 
+  const [msgRekapLibur, setMsgRekapLibur] = useState({ type: '', text: '' });
+  const [loadingRekapLibur, setLoadingRekapLibur] = useState(false);
+
   const WAKTU_EMOJI = { pagi: '🌅', siang: '☀️', malam: '🌙' };
 
   function goToForm() {
@@ -84,6 +108,21 @@ export default function InputPage() {
     setLoading(false);
     if (!res.ok) { setMsg({ type: 'error', text: d.error }); return; }
     setMsg({ type: 'success', text: '✅ Notifikasi LIBUR PRODUKSI terkirim ke Bos' });
+  }
+
+  async function kirimLiburRekap() {
+    if (!confirm('Kirim notifikasi LIBUR PRODUKSI untuk Rekap Harian (ketiga shift libur)?\n\nPesan akan langsung terkirim ke WhatsApp Bos.')) return;
+    setLoadingRekapLibur(true);
+    setMsgRekapLibur({ type: '', text: '' });
+    const res = await fetch('/api/libur', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ target: 'rekap', tanggal: todayDisplay() })
+    });
+    const d = await res.json();
+    setLoadingRekapLibur(false);
+    if (!res.ok) { setMsgRekapLibur({ type: 'error', text: d.error }); return; }
+    setMsgRekapLibur({ type: 'success', text: '✅ Notifikasi LIBUR PRODUKSI (Rekap) terkirim ke Bos' });
   }
 
   return (
@@ -140,8 +179,12 @@ export default function InputPage() {
         <h2>📋 Rekap Harian</h2>
         <p className="sub">Rekap gabungan semua shift — kirim manual</p>
         <button className="secondary" onClick={() => router.push('/input/form?target=rekap')}>
-          Isi Rekap Harian
+          📝 Isi Rekap Harian
         </button>
+        <button className="danger" disabled={loadingRekapLibur} onClick={kirimLiburRekap} style={{ marginTop: 8 }}>
+          {loadingRekapLibur ? 'Mengirim...' : '⛔ LIBUR (Ketiga Shift) — kirim notif'}
+        </button>
+        {msgRekapLibur.text && <p className={msgRekapLibur.type}>{msgRekapLibur.text}</p>}
       </div>
     </div>
   );
