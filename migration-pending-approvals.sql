@@ -7,7 +7,7 @@ create table if not exists pending_approvals (
   form_payload jsonb not null,               -- payload lengkap yg akan ditulis ke Excel saat di-ACC
   ef_wm_preview numeric,                     -- nilai EF WM yang terdeteksi anomali
   anomali_reason text,                       -- alasan anomali ditampilkan ke viewer
-  submitted_by_id integer,
+  submitted_by_id uuid,
   submitted_by_username text,
   status text not null default 'pending',    -- pending | approved | rejected
   resolved_by_username text,
