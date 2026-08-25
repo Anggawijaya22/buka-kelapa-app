@@ -83,39 +83,45 @@ function FormInner() {
   }
 
   // Cek anomali EF WM shift SEBELUM kirim — dihitung sendiri di app (EF WM = Kg WM / Buka Kelapa)
-  // sama seperti formula Excel, supaya user bisa disodorkan pilihan Tetap Kirim / Revisi sebelum data terkirim.
-  async function cekAnomaliShift() {
+  // sama seperti formula Excel. Hanya MENDETEKSI, tidak menampilkan dialog — dialog diatur di submit().
+  function deteksiAnomaliShift() {
     const bkKlpNum = parseFloat(form.bkKlp);
     const kgWmNum = parseFloat(form.kgWm);
     if (!isFinite(bkKlpNum) || !isFinite(kgWmNum) || bkKlpNum === 0) {
-      return true; // data belum lengkap untuk dihitung, tidak bisa cek — lanjut kirim seperti biasa
+      return { anomali: false }; // data belum lengkap untuk dihitung — lanjut kirim seperti biasa
     }
     const efWm = kgWmNum / bkKlpNum;
     const isAnomali = efWm < RANGE_MIN || efWm > RANGE_MAX;
-    if (!isAnomali) return true;
+    if (!isAnomali) return { anomali: false };
 
-    const pesan = `EF WM diperkirakan: ${toIDDecimal(efWm)}\nRange normal: ${toIDDecimal(RANGE_MIN)} - ${toIDDecimal(RANGE_MAX)}\n\nCek kembali Kg WM dan Buka Kelapa (Kg) — mungkin ada salah ketik.\nJika data ini memang benar, Anda bisa tetap kirim.`;
-    return confirmAnomali(pesan);
+    return {
+      anomali: true,
+      efWm,
+      reason: `EF WM diperkirakan: ${toIDDecimal(efWm)}\nRange normal: ${toIDDecimal(RANGE_MIN)} - ${toIDDecimal(RANGE_MAX)}\n\nCek kembali Kg WM dan Buka Kelapa (Kg) — mungkin ada salah ketik.`
+    };
   }
 
   // Cek anomali EF WM rekap — nilai EF WM rekap adalah akumulasi 3 shift yang SUDAH ada di Excel
   // (bukan dari isian form rekap ini), jadi diambil dari data live dashboard sebelum submit.
-  async function cekAnomaliRekap() {
+  async function deteksiAnomaliRekap() {
     try {
       const res = await fetch('/api/dashboard');
-      if (!res.ok) return true;
+      if (!res.ok) return { anomali: false };
       const d = await res.json();
       const raw = d?.live?.rekap?.efWm;
-      if (!raw || raw === '-') return true;
+      if (!raw || raw === '-') return { anomali: false };
       const efWm = parseFloat(String(raw).replace(',', '.'));
-      if (!isFinite(efWm)) return true;
+      if (!isFinite(efWm)) return { anomali: false };
       const isAnomali = efWm < RANGE_MIN || efWm > RANGE_MAX;
-      if (!isAnomali) return true;
+      if (!isAnomali) return { anomali: false };
 
-      const pesan = `EF WM Rekap saat ini di Excel: ${toIDDecimal(efWm)}\nRange normal: ${toIDDecimal(RANGE_MIN)} - ${toIDDecimal(RANGE_MAX)}\n\nIni akumulasi dari 3 shift yang sudah masuk hari ini, bukan dari isian form Rekap ini.\nCek data shift terkait jika perlu, atau tetap kirim jika sudah yakin.`;
-      return confirmAnomali(pesan);
+      return {
+        anomali: true,
+        efWm,
+        reason: `EF WM Rekap saat ini di Excel: ${toIDDecimal(efWm)}\nRange normal: ${toIDDecimal(RANGE_MIN)} - ${toIDDecimal(RANGE_MAX)}\n\nIni akumulasi dari 3 shift yang sudah masuk hari ini, bukan dari isian form Rekap ini.`
+      };
     } catch {
-      return true; // gagal cek → jangan blok submit, biarkan n8n yang deteksi
+      return { anomali: false }; // gagal cek → jangan blok submit
     }
   }
 
@@ -123,9 +129,49 @@ function FormInner() {
     e.preventDefault();
     setMsg({ type: '', text: '' });
 
-    const lanjut = isRekap ? await cekAnomaliRekap() : await cekAnomaliShift();
-    if (!lanjut) return;
+    const deteksi = isRekap ? await deteksiAnomaliRekap() : deteksiAnomaliShift();
 
+    if (deteksi.anomali) {
+      const pesan = `${deteksi.reason}\n\nAnda bisa:\n• Tetap Kirim — data akan dikirim ke Viewer untuk di-ACC dulu sebelum masuk Excel\n• Revisi Data — kembali mengecek isian form`;
+      const tetapKirim = await confirmAnomali(pesan);
+      if (!tetapKirim) return; // Revisi — kembali ke form, tidak ada yang dikirim
+
+      // Tetap Kirim → JANGAN langsung ke Excel/n8n, kirim dulu ke antrian approval Viewer/Superadmin
+      setLoading(true);
+      const payload = {
+        ...form,
+        tanggal: toExcelDate(form.tanggal),
+        tanggalIso: form.tanggal
+      };
+      if (!isRekap) {
+        const phOut = {};
+        for (const line of ['A', 'B', 'C', 'D', 'E']) {
+          const p = ph[line];
+          const jam = (p.dari && p.sampai) ? `${timeToDot(p.dari)} - ${timeToDot(p.sampai)}` : '';
+          phOut[line] = { jam, nilai: p.nilai || '' };
+        }
+        payload.phSantan = phOut;
+      }
+
+      const res = await fetch('/api/approvals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target, waktu, form: payload, efWmPreview: deteksi.efWm, reason: deteksi.reason })
+      });
+      const data = await res.json();
+      setLoading(false);
+
+      if (!res.ok) {
+        setMsg({ type: 'error', text: data.error });
+        return;
+      }
+      let anomaliText = '📨 Data anomali terkirim ke Viewer untuk persetujuan. Excel belum diupdate sampai di-ACC.';
+      anomaliText += data.waSent ? ' Notifikasi WA ke Viewer terkirim 📱' : ' (Notifikasi WA gagal terkirim, tapi tetap bisa dilihat Viewer di app)';
+      setMsg({ type: 'success', text: anomaliText });
+      return;
+    }
+
+    // Tidak anomali → kirim seperti biasa, langsung ke Excel + WA
     setLoading(true);
 
     const payload = {

@@ -1,9 +1,6 @@
 import { NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { db, logAudit } from '@/lib/db';
-import { buildRekapCellMap } from '@/lib/excel-map';
-import { writeCells } from '@/lib/graph';
-import { triggerN8n } from '@/lib/n8n';
+import { executeRekapSubmit } from '@/lib/submitFlow';
 
 export async function POST(req) {
   const auth = await requireAuth();
@@ -18,26 +15,8 @@ export async function POST(req) {
   }
 
   try {
-    const cellMap = buildRekapCellMap(form);
-    const written = await writeCells(cellMap);
-
-    await db.from('submissions').insert({
-      user_id: auth.session.id,
-      username: auth.session.username,
-      target: 'rekap',
-      tanggal: form.tanggalIso || null,
-      payload: form
-    });
-    await logAudit(auth.session, 'SUBMIT_REKAP', { tanggal: form.tanggal, cells: written.length });
-
-    const n8n = await triggerN8n(process.env.N8N_WEBHOOK_REKAP, { tanggal: form.tanggal });
-
-    return NextResponse.json({
-      ok: true,
-      cellsWritten: written.length,
-      waSent: n8n.ok,
-      warn: n8n.warn || null
-    });
+    const result = await executeRekapSubmit({ form, actorSession: auth.session });
+    return NextResponse.json({ ok: true, ...result });
   } catch (e) {
     return NextResponse.json({ error: e.message }, { status: 500 });
   }

@@ -1,11 +1,61 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Nav from '@/lib/Nav';
 
 function todayDisplay() {
   const d = new Date();
   return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
+}
+
+function targetLabelSingkat(item) {
+  if (item.target === 'rekap') return 'Rekap Harian';
+  return 'Shift ' + item.target.slice(-1) + (item.waktu ? ' (' + item.waktu.toUpperCase() + ')' : '');
+}
+
+function PengajuanSaya() {
+  const [items, setItems] = useState([]);
+  const seenIdsRef = useRef(new Set());
+
+  async function load() {
+    const res = await fetch('/api/approvals?mine=true');
+    if (!res.ok) return;
+    const d = await res.json();
+    // Hanya tampilkan yang belum "dibaca" (masih pending, atau rejected yang baru)
+    const relevant = (d.items || []).filter(it => it.status === 'pending' || (it.status === 'rejected' && !seenIdsRef.current.has(it.id)));
+    setItems(relevant);
+  }
+
+  function tutup(id) {
+    seenIdsRef.current.add(id);
+    setItems(prev => prev.filter(it => it.id !== id));
+  }
+
+  useEffect(() => {
+    load();
+    const t = setInterval(load, 5000);
+    return () => clearInterval(t);
+  }, []);
+
+  if (items.length === 0) return null;
+
+  return (
+    <>
+      {items.map(it => (
+        <div key={it.id} className="card" style={{ borderColor: it.status === 'pending' ? 'var(--warn)' : 'var(--danger)' }}>
+          {it.status === 'pending' && (
+            <p style={{ fontSize: 14 }}>⏳ <b>{targetLabelSingkat(it)}</b> ({it.tanggal}) sedang menunggu approval Viewer karena ada anomali.</p>
+          )}
+          {it.status === 'rejected' && (
+            <>
+              <p style={{ fontSize: 14, marginBottom: 8 }}>❌ <b>{targetLabelSingkat(it)}</b> ({it.tanggal}) di-<b>reject</b> oleh {it.resolved_by_username}. Mohon cek kembali dan kirim ulang.</p>
+              <button type="button" className="secondary" onClick={() => tutup(it.id)}>Mengerti, tutup</button>
+            </>
+          )}
+        </div>
+      ))}
+    </>
+  );
 }
 
 export default function InputPage() {
@@ -41,6 +91,8 @@ export default function InputPage() {
       <Nav />
       <h1>Input Data</h1>
       <p className="sub">Pilih shift dan waktu produksi</p>
+
+      <PengajuanSaya />
 
       <div className="card">
         <h2>1️⃣ Pilih Shift</h2>
