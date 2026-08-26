@@ -28,7 +28,7 @@ export default function DashboardPage() {
     return (
       <div className="container">
         <Nav />
-        <div className="card"><p className="error">Halaman ini hanya untuk Superadmin</p></div>
+        <div className="card"><p className="error">Halaman ini hanya untuk Developer</p></div>
       </div>
     );
   }

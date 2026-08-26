@@ -16,7 +16,7 @@ export async function POST(req) {
   }
   if (auth.session.role === 'admin') {
     if (!auth.session.shift) {
-      return NextResponse.json({ error: 'Shift Anda belum diset. Hubungi superadmin.' }, { status: 403 });
+      return NextResponse.json({ error: 'Shift Anda belum diset. Hubungi developer.' }, { status: 403 });
     }
     if (auth.session.shift !== target) {
       return NextResponse.json({ error: 'Anda hanya bisa input data untuk shift yang ditugaskan' }, { status: 403 });

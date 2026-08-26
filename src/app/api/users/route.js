@@ -47,8 +47,12 @@ export async function DELETE(req) {
     return NextResponse.json({ error: 'Tidak bisa hapus akun sendiri' }, { status: 400 });
   }
   const { data: target } = await db.from('users').select('username').eq('id', id).single();
-  await db.from('users').delete().eq('id', id);
-  await logAudit(auth.session, 'HAPUS_USER', { username: target?.username });
+  if (!target) return NextResponse.json({ error: 'User tidak ditemukan' }, { status: 404 });
+
+  const { error } = await db.from('users').delete().eq('id', id);
+  if (error) return NextResponse.json({ error: 'Gagal menghapus user: ' + error.message }, { status: 500 });
+
+  await logAudit(auth.session, 'HAPUS_USER', { username: target.username });
   return NextResponse.json({ ok: true });
 }
 

@@ -3,7 +3,7 @@ import { requireAuth } from '@/lib/auth';
 
 export async function GET() {
   const auth = await requireAuth('superadmin');
-  if (auth.error) return NextResponse.json({ error: 'Hanya superadmin yang bisa menghubungkan Microsoft' }, { status: auth.status });
+  if (auth.error) return NextResponse.json({ error: 'Hanya developer yang bisa menghubungkan Microsoft' }, { status: auth.status });
 
   const params = new URLSearchParams({
     client_id: process.env.MS_CLIENT_ID,

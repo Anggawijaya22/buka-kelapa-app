@@ -132,7 +132,7 @@ export default function ApprovalPage() {
     return (
       <div className="container">
         <Nav />
-        <div className="card"><p className="error">Halaman ini hanya untuk Viewer/Superadmin</p></div>
+        <div className="card"><p className="error">Halaman ini hanya untuk Viewer/Developer</p></div>
       </div>
     );
   }

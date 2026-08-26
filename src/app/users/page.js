@@ -2,6 +2,8 @@
 import { useEffect, useState } from 'react';
 import Nav from '@/lib/Nav';
 
+const ROLE_LABELS = { superadmin: 'Developer', admin: 'Admin', viewer: 'Viewer' };
+
 export default function UsersPage() {
   const [users, setUsers] = useState([]);
   const [username, setUsername] = useState('');
@@ -78,7 +80,7 @@ export default function UsersPage() {
     return (
       <div className="container">
         <Nav />
-        <div className="card"><p className="error">Halaman ini hanya untuk Superadmin</p></div>
+        <div className="card"><p className="error">Halaman ini hanya untuk Developer</p></div>
       </div>
     );
   }
@@ -99,7 +101,7 @@ export default function UsersPage() {
           <label>Role</label>
           <select value={role} onChange={e => setRole(e.target.value)}>
             <option value="admin">Admin</option>
-            <option value="superadmin">Superadmin</option>
+            <option value="superadmin">Developer</option>
             <option value="viewer">Viewer</option>
           </select>
           {role === 'admin' && (
@@ -126,7 +128,7 @@ export default function UsersPage() {
             {users.map(u => (
               <tr key={u.id}>
                 <td>{u.username}</td>
-                <td><span className={`badge ${u.role}`}>{u.role}</span></td>
+                <td><span className={`badge ${u.role}`}>{ROLE_LABELS[u.role] || u.role}</span></td>
                 <td>{u.role === 'admin' ? (u.shift ? 'Shift ' + u.shift.slice(-1) : '⚠️ belum diset') : '-'}</td>
                 <td>
                   {u.role === 'admin' && (

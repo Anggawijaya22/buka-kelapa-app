@@ -9,7 +9,7 @@ export async function POST(req, { params }) {
   const auth = await requireAuth();
   if (auth.error) return NextResponse.json({ error: auth.error }, { status: auth.status });
   if (!APPROVER_ROLES.includes(auth.session.role)) {
-    return NextResponse.json({ error: 'Hanya Viewer/Superadmin yang boleh ACC' }, { status: 403 });
+    return NextResponse.json({ error: 'Hanya Viewer/Developer yang boleh ACC' }, { status: 403 });
   }
 
   const id = Number(params.id);

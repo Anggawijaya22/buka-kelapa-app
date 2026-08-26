@@ -32,7 +32,7 @@ export async function GET(req) {
   }
 
   if (!APPROVER_ROLES.includes(auth.session.role)) {
-    return NextResponse.json({ error: 'Hanya Viewer/Superadmin yang boleh melihat daftar approval' }, { status: 403 });
+    return NextResponse.json({ error: 'Hanya Viewer/Developer yang boleh melihat daftar approval' }, { status: 403 });
   }
   const { data, error } = await db
     .from('pending_approvals')
@@ -61,7 +61,7 @@ export async function POST(req) {
   }
   if (!isRekap && auth.session.role === 'admin') {
     if (!auth.session.shift) {
-      return NextResponse.json({ error: 'Shift Anda belum diset. Hubungi superadmin.' }, { status: 403 });
+      return NextResponse.json({ error: 'Shift Anda belum diset. Hubungi developer.' }, { status: 403 });
     }
     if (auth.session.shift !== target) {
       return NextResponse.json({ error: 'Anda hanya bisa input data untuk shift yang ditugaskan' }, { status: 403 });

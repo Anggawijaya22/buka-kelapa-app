@@ -148,7 +148,7 @@ export default function InputPage() {
 
       {role === 'admin' && !myShift && (
         <div className="card">
-          <p className="error">Shift Anda belum diset oleh superadmin. Hubungi superadmin untuk bisa input data.</p>
+          <p className="error">Shift Anda belum diset oleh developer. Hubungi developer untuk bisa input data.</p>
         </div>
       )}
 
