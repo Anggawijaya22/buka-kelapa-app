@@ -6,7 +6,7 @@ const COOKIE = 'bk_session';
 
 export async function createSession(user) {
   const token = await new SignJWT({
-    id: user.id, username: user.username, role: user.role
+    id: user.id, username: user.username, role: user.role, shift: user.shift || null
   })
     .setProtectedHeader({ alg: 'HS256' })
     .setExpirationTime('12h')

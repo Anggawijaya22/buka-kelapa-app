@@ -4,6 +4,10 @@ import { db } from '@/lib/db';
 import { readRange } from '@/lib/graph';
 
 export async function GET() {
+  // Catatan: endpoint ini juga dipakai internal oleh form input (cek anomali EF WM
+  // rekap sebelum submit), jadi tetap terbuka untuk semua role yang login — bukan
+  // hanya superadmin. Pembatasan menu "Dashboard" khusus superadmin dilakukan di
+  // level halaman (src/app/dashboard/page.js) dan Nav, bukan di API ini.
   const auth = await requireAuth();
   if (auth.error) return NextResponse.json({ error: auth.error }, { status: auth.status });
 

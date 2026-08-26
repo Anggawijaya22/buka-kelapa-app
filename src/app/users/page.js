@@ -7,6 +7,7 @@ export default function UsersPage() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState('admin');
+  const [shift, setShift] = useState('');
   const [msg, setMsg] = useState({ type: '', text: '' });
   const [forbidden, setForbidden] = useState(false);
 
@@ -24,12 +25,27 @@ export default function UsersPage() {
     const res = await fetch('/api/users', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password, role })
+      body: JSON.stringify({ username, password, role, shift: role === 'admin' ? shift : null })
     });
     const d = await res.json();
     if (!res.ok) { setMsg({ type: 'error', text: d.error }); return; }
     setMsg({ type: 'success', text: '✅ User berhasil ditambahkan' });
-    setUsername(''); setPassword('');
+    setUsername(''); setPassword(''); setShift('');
+    load();
+  }
+
+  async function ubahShift(id, uname, currentShift) {
+    const pilihan = prompt(`Shift baru untuk "${uname}" — ketik A, B, atau C:`, (currentShift || '').slice(-1));
+    if (!pilihan) return;
+    const s = 'shift' + pilihan.trim().toUpperCase();
+    if (!['shiftA', 'shiftB', 'shiftC'].includes(s)) { alert('Ketik A, B, atau C saja'); return; }
+    const res = await fetch('/api/users', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, shift: s })
+    });
+    const d = await res.json();
+    if (!res.ok) { alert(d.error); return; }
     load();
   }
 
@@ -86,6 +102,17 @@ export default function UsersPage() {
             <option value="superadmin">Superadmin</option>
             <option value="viewer">Viewer</option>
           </select>
+          {role === 'admin' && (
+            <>
+              <label>Shift (admin hanya bisa input shift ini)</label>
+              <select value={shift} onChange={e => setShift(e.target.value)} required>
+                <option value="">-- Pilih Shift --</option>
+                <option value="shiftA">Shift A</option>
+                <option value="shiftB">Shift B</option>
+                <option value="shiftC">Shift C</option>
+              </select>
+            </>
+          )}
           {msg.text && <p className={msg.type}>{msg.text}</p>}
           <button>+ Tambah User</button>
         </form>
@@ -94,13 +121,17 @@ export default function UsersPage() {
       <div className="card" style={{ overflowX: 'auto' }}>
         <h2>Daftar User</h2>
         <table>
-          <thead><tr><th>Username</th><th>Role</th><th>Aksi</th></tr></thead>
+          <thead><tr><th>Username</th><th>Role</th><th>Shift</th><th>Aksi</th></tr></thead>
           <tbody>
             {users.map(u => (
               <tr key={u.id}>
                 <td>{u.username}</td>
                 <td><span className={`badge ${u.role}`}>{u.role}</span></td>
+                <td>{u.role === 'admin' ? (u.shift ? 'Shift ' + u.shift.slice(-1) : '⚠️ belum diset') : '-'}</td>
                 <td>
+                  {u.role === 'admin' && (
+                    <a href="#" onClick={e => { e.preventDefault(); ubahShift(u.id, u.username, u.shift); }} style={{ marginRight: 12 }}>Ubah Shift</a>
+                  )}
                   <a href="#" onClick={e => { e.preventDefault(); resetPass(u.id, u.username); }} style={{ marginRight: 12 }}>Reset</a>
                   <a href="#" onClick={e => { e.preventDefault(); delUser(u.id, u.username); }} style={{ color: '#dc2626' }}>Hapus</a>
                 </td>

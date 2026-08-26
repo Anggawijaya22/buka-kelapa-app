@@ -8,6 +8,7 @@ export default function HistoryPage() {
   const [role, setRole] = useState('');
   const [clearing, setClearing] = useState(false);
   const [msg, setMsg] = useState('');
+  const [forbidden, setForbidden] = useState(false);
 
   useEffect(() => {
     setRole(sessionStorage.getItem('bk_role') || '');
@@ -17,6 +18,7 @@ export default function HistoryPage() {
   async function loadLogs() {
     setLoading(true);
     const res = await fetch('/api/logs');
+    if (res.status === 403) { setForbidden(true); setLoading(false); return; }
     const d = await res.json();
     setLogs(d.logs || []);
     setLoading(false);
@@ -32,6 +34,15 @@ export default function HistoryPage() {
     if (!res.ok) { setMsg('❌ ' + d.error); return; }
     setMsg('✅ Semua log berhasil dihapus');
     setLogs([]);
+  }
+
+  if (forbidden) {
+    return (
+      <div className="container">
+        <Nav />
+        <div className="card"><p className="error">Halaman ini hanya untuk Superadmin</p></div>
+      </div>
+    );
   }
 
   return (

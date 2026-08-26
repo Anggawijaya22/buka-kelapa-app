@@ -6,6 +6,7 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceL
 export default function DashboardPage() {
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
+  const [forbidden, setForbidden] = useState(false);
   const [loading, setLoading] = useState(true);
 
   async function load() {
@@ -17,7 +18,20 @@ export default function DashboardPage() {
     setData(d);
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    const role = sessionStorage.getItem('bk_role') || '';
+    if (role !== 'superadmin') { setForbidden(true); setLoading(false); return; }
+    load();
+  }, []);
+
+  if (forbidden) {
+    return (
+      <div className="container">
+        <Nav />
+        <div className="card"><p className="error">Halaman ini hanya untuk Superadmin</p></div>
+      </div>
+    );
+  }
 
   const chartData = [];
   if (data?.trend) {

@@ -22,7 +22,9 @@ export default function LoginPage() {
     setLoading(false);
     if (!res.ok) { setError(data.error); return; }
     sessionStorage.setItem('bk_role', data.role);
-    router.push('/dashboard');
+    sessionStorage.setItem('bk_shift', data.shift || '');
+    const dest = data.role === 'admin' ? '/input' : data.role === 'viewer' ? '/approval' : '/dashboard';
+    router.push(dest);
   }
 
   return (

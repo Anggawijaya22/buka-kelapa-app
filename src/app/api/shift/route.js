@@ -14,6 +14,14 @@ export async function POST(req) {
   if (!SHIFT_LABELS[target]) {
     return NextResponse.json({ error: 'Target shift tidak valid' }, { status: 400 });
   }
+  if (auth.session.role === 'admin') {
+    if (!auth.session.shift) {
+      return NextResponse.json({ error: 'Shift Anda belum diset. Hubungi superadmin.' }, { status: 403 });
+    }
+    if (auth.session.shift !== target) {
+      return NextResponse.json({ error: 'Anda hanya bisa input data untuk shift yang ditugaskan' }, { status: 403 });
+    }
+  }
   if (!['pagi', 'siang', 'malam'].includes(waktu)) {
     return NextResponse.json({ error: 'Waktu shift tidak valid' }, { status: 400 });
   }

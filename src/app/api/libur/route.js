@@ -16,6 +16,14 @@ export async function POST(req) {
   if (!target || !tanggal || (!isRekap && !waktu)) {
     return NextResponse.json({ error: `target, tanggal${isRekap ? '' : ', dan waktu'} wajib diisi` }, { status: 400 });
   }
+  if (!isRekap && auth.session.role === 'admin') {
+    if (!auth.session.shift) {
+      return NextResponse.json({ error: 'Shift Anda belum diset. Hubungi superadmin.' }, { status: 403 });
+    }
+    if (auth.session.shift !== target) {
+      return NextResponse.json({ error: 'Anda hanya bisa kirim notifikasi untuk shift yang ditugaskan' }, { status: 403 });
+    }
+  }
 
   // Shift libur (shiftA/B/C + waktu) pakai N8N_WEBHOOK_LIBUR.
   // Rekap libur (ketiga shift libur sekaligus) pakai webhook terpisah N8N_WEBHOOK_LIBUR_REKAP.

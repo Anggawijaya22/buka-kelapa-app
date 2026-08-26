@@ -81,10 +81,23 @@ function PengajuanSaya() {
 
 export default function InputPage() {
   const router = useRouter();
+  const [role, setRole] = useState('');
+  const [myShift, setMyShift] = useState('');
   const [shift, setShift] = useState('');
   const [waktu, setWaktu] = useState('');
   const [msg, setMsg] = useState({ type: '', text: '' });
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const r = sessionStorage.getItem('bk_role') || '';
+    const s = sessionStorage.getItem('bk_shift') || '';
+    setRole(r);
+    setMyShift(s);
+    // Admin dengan shift sudah diset: langsung terkunci ke shift-nya sendiri
+    if (r === 'admin' && s) setShift(s);
+  }, []);
+
+  const shiftOptions = role === 'admin' ? (myShift ? [myShift] : []) : ['shiftA', 'shiftB', 'shiftC'];
 
   const [msgRekapLibur, setMsgRekapLibur] = useState({ type: '', text: '' });
   const [loadingRekapLibur, setLoadingRekapLibur] = useState(false);
@@ -133,19 +146,27 @@ export default function InputPage() {
 
       <PengajuanSaya />
 
-      <div className="card">
-        <h2>1️⃣ Pilih Shift</h2>
-        <div className="grid3">
-          {['shiftA', 'shiftB', 'shiftC'].map(s => (
-            <button key={s} type="button"
-              className={shift === s ? '' : 'secondary'}
-              style={{ marginTop: 8 }}
-              onClick={() => setShift(s)}>
-              Shift {s.slice(-1)}
-            </button>
-          ))}
+      {role === 'admin' && !myShift && (
+        <div className="card">
+          <p className="error">Shift Anda belum diset oleh superadmin. Hubungi superadmin untuk bisa input data.</p>
         </div>
-      </div>
+      )}
+
+      {shiftOptions.length > 0 && (
+        <div className="card">
+          <h2>1️⃣ Pilih Shift</h2>
+          <div className="grid3">
+            {shiftOptions.map(s => (
+              <button key={s} type="button"
+                className={shift === s ? '' : 'secondary'}
+                style={{ marginTop: 8 }}
+                onClick={() => setShift(s)}>
+                Shift {s.slice(-1)}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {shift && (
         <div className="card">

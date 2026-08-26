@@ -16,5 +16,5 @@ export async function POST(req) {
 
   await createSession(user);
   await logAudit(user, 'LOGIN', null);
-  return NextResponse.json({ ok: true, role: user.role, username: user.username });
+  return NextResponse.json({ ok: true, role: user.role, username: user.username, shift: user.shift || null });
 }
