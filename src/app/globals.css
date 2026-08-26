@@ -55,3 +55,9 @@ th { color: var(--muted); font-weight: 600; font-size: 12px; }
 .badge.admin_atas { background: #dbeafe; color: #1e40af; }
 .badge.viewer { background: #e0e7ff; color: #3730a3; }
 .field-error { border-color: #dc2626 !important; background: #fef2f2; }
+@keyframes bk-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+.spinner {
+  display: inline-block; width: 28px; height: 28px;
+  border: 3px solid var(--border); border-top-color: var(--primary);
+  border-radius: 50%; animation: bk-spin 0.7s linear infinite;
+}

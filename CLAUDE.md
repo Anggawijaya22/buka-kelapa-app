@@ -71,10 +71,16 @@ Admin input data langsung dari HP → tulis ke Excel OneDrive → n8n baca Excel
 - **⬇️ Download Excel:** semua role (lihat "Download Excel" di bawah)
 
 ### Download Excel
-- Link di Nav (`show: true` untuk semua role) → `GET /api/excel/download` (`src/app/api/excel/download/route.js`).
+- Link "⬇️ Download Excel" di Nav (`src/lib/Nav.js`, tampil untuk semua role) → fetch JS ke
+  `GET /api/excel/download` (`src/app/api/excel/download/route.js`), BUKAN link `<a href>` biasa —
+  supaya bisa munculkan popup konfirmasi & indikator loading (lihat di bawah) sebelum browser
+  benar-benar men-save file-nya.
+- Alur klik: popup konfirmasi "Apakah Anda yakin akan mendownload file Excel?" (Ya/Tidak) → kalau Ya,
+  overlay "File sedang didownload, Silahkan tunggu..." dengan spinner (`.spinner` di `globals.css`)
+  sambil fetch blob-nya, lalu trigger save via `<a download>` yang dibuat dinamis dari object URL.
 - Download file Excel OneDrive APA ADANYA (byte mentah lewat Graph API `/content`), bukan generate ulang —
   jadi hasil download = kondisi live sheet saat itu juga, termasuk isian yang belum diproses n8n.
-  Nama file otomatis `Laporan-Produksi-<tanggal-hari-ini>.xlsx`.
+  Nama file diambil dari header `Content-Disposition` (`Laporan-Produksi-<tanggal-hari-ini>.xlsx`).
 - Fungsi Graph API: `downloadExcelFile()` di `src/lib/graph.js`, pakai `MS_FILE_ID` yang sama dengan
   fitur tulis Excel lainnya (`writeCell`/`readRange`).
 - Tidak ada pembatasan role selain harus login (`requireAuth()` tanpa parameter role).
