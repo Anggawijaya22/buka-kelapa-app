@@ -32,6 +32,7 @@ export default function Nav() {
     { href: '/history',     label: 'History',      show: isAdminShift || isAdminAtas || isSuper },
     { href: '/approval',    label: '⚠️ Approval',  show: isViewer || isSuper },
     { href: '/password',    label: 'Password',     show: true },
+    { href: '/api/excel/download', label: '⬇️ Download Excel', show: true, download: true },
     { href: '/users',       label: 'Users',        show: isSuper },
     { href: '/pengaturan',  label: '⚙️ Pengaturan', show: isSuper },
   ];
@@ -39,7 +40,7 @@ export default function Nav() {
   return (
     <div className="nav">
       {links.filter(l => l.show).map(l => (
-        <a key={l.href} href={l.href} className={pathname.startsWith(l.href) ? 'active' : ''}>{l.label}</a>
+        <a key={l.href} href={l.href} download={l.download || undefined} className={!l.download && pathname.startsWith(l.href) ? 'active' : ''}>{l.label}</a>
       ))}
       <a href="#" onClick={e => { e.preventDefault(); logout(); }} style={{ marginLeft: 'auto', color: '#dc2626' }}>Keluar</a>
     </div>

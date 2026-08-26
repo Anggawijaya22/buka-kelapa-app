@@ -68,6 +68,16 @@ Admin input data langsung dari HP → tulis ke Excel OneDrive → n8n baca Excel
 - **History:** Admin Shift (hanya data shift miliknya sendiri, bisa edit) + Admin Atas (data shiftA/B/C + rekap, bisa edit semua) + Developer (semua, bisa edit semua)
 - **Approval:** viewer + Developer
 - **Password:** semua role
+- **⬇️ Download Excel:** semua role (lihat "Download Excel" di bawah)
+
+### Download Excel
+- Link di Nav (`show: true` untuk semua role) → `GET /api/excel/download` (`src/app/api/excel/download/route.js`).
+- Download file Excel OneDrive APA ADANYA (byte mentah lewat Graph API `/content`), bukan generate ulang —
+  jadi hasil download = kondisi live sheet saat itu juga, termasuk isian yang belum diproses n8n.
+  Nama file otomatis `Laporan-Produksi-<tanggal-hari-ini>.xlsx`.
+- Fungsi Graph API: `downloadExcelFile()` di `src/lib/graph.js`, pakai `MS_FILE_ID` yang sama dengan
+  fitur tulis Excel lainnya (`writeCell`/`readRange`).
+- Tidak ada pembatasan role selain harus login (`requireAuth()` tanpa parameter role).
 
 > ⚠️ Menu **History** yang SEKARANG berbeda total dari History versi lama (yang dulu isinya audit log,
 > khusus Developer, sudah dihapus total termasuk `src/app/api/logs`). History versi baru ini adalah

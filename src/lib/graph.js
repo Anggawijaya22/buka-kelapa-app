@@ -82,6 +82,17 @@ export async function writeCells(cellValueMap) {
   return results;
 }
 
+// ---------- Download file Excel utuh (byte mentah, untuk tombol Download) ----------
+export async function downloadExcelFile() {
+  const token = await getAccessToken();
+  const url = `${GRAPH}/me/drive/items/${process.env.MS_FILE_ID}/content`;
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok) {
+    throw new Error(`Gagal download file Excel (${res.status})`);
+  }
+  return res.arrayBuffer();
+}
+
 // ---------- Baca range untuk dashboard ----------
 export async function readRange(rangeAddress) {
   const token = await getAccessToken();
