@@ -6,8 +6,8 @@ import { executeShiftSubmit } from '@/lib/submitFlow';
 export async function POST(req) {
   const auth = await requireAuth();
   if (auth.error) return NextResponse.json({ error: auth.error }, { status: auth.status });
-  if (auth.session.role === 'viewer') {
-    return NextResponse.json({ error: 'Viewer tidak bisa input data' }, { status: 403 });
+  if (!['admin', 'superadmin'].includes(auth.session.role)) {
+    return NextResponse.json({ error: 'Anda tidak punya akses untuk input data shift' }, { status: 403 });
   }
 
   const { target, waktu, form } = await req.json();

@@ -47,9 +47,6 @@ export async function GET(req) {
 export async function POST(req) {
   const auth = await requireAuth();
   if (auth.error) return NextResponse.json({ error: auth.error }, { status: auth.status });
-  if (auth.session.role === 'viewer') {
-    return NextResponse.json({ error: 'Viewer tidak bisa input data' }, { status: 403 });
-  }
 
   const { target, waktu, form, efWmPreview, reason } = await req.json();
   const isRekap = target === 'rekap';
@@ -59,12 +56,22 @@ export async function POST(req) {
   if (!form?.tanggal) {
     return NextResponse.json({ error: 'Tanggal wajib diisi' }, { status: 400 });
   }
-  if (!isRekap && auth.session.role === 'admin') {
-    if (!auth.session.shift) {
-      return NextResponse.json({ error: 'Shift Anda belum diset. Hubungi developer.' }, { status: 403 });
+
+  if (isRekap) {
+    if (!['admin_atas', 'superadmin'].includes(auth.session.role)) {
+      return NextResponse.json({ error: 'Hanya Admin Atas/Developer yang bisa input rekap harian' }, { status: 403 });
     }
-    if (auth.session.shift !== target) {
-      return NextResponse.json({ error: 'Anda hanya bisa input data untuk shift yang ditugaskan' }, { status: 403 });
+  } else {
+    if (!['admin', 'superadmin'].includes(auth.session.role)) {
+      return NextResponse.json({ error: 'Anda tidak punya akses untuk input data shift' }, { status: 403 });
+    }
+    if (auth.session.role === 'admin') {
+      if (!auth.session.shift) {
+        return NextResponse.json({ error: 'Shift Anda belum diset. Hubungi developer.' }, { status: 403 });
+      }
+      if (auth.session.shift !== target) {
+        return NextResponse.json({ error: 'Anda hanya bisa input data untuk shift yang ditugaskan' }, { status: 403 });
+      }
     }
   }
 

@@ -5,8 +5,8 @@ import { executeRekapSubmit } from '@/lib/submitFlow';
 export async function POST(req) {
   const auth = await requireAuth();
   if (auth.error) return NextResponse.json({ error: auth.error }, { status: auth.status });
-  if (auth.session.role === 'viewer') {
-    return NextResponse.json({ error: 'Viewer tidak bisa input data' }, { status: 403 });
+  if (!['admin_atas', 'superadmin'].includes(auth.session.role)) {
+    return NextResponse.json({ error: 'Hanya Admin Atas/Developer yang bisa input rekap harian' }, { status: 403 });
   }
 
   const { form } = await req.json();

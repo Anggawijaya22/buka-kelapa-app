@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import Nav from '@/lib/Nav';
 
-const ROLE_LABELS = { superadmin: 'Developer', admin: 'Admin', viewer: 'Viewer' };
+const ROLE_LABELS = { superadmin: 'Developer', admin: 'Admin Shift', admin_atas: 'Admin Atas', viewer: 'Viewer' };
 
 export default function UsersPage() {
   const [users, setUsers] = useState([]);
@@ -100,7 +100,8 @@ export default function UsersPage() {
           <input type="text" value={password} onChange={e => setPassword(e.target.value)} required />
           <label>Role</label>
           <select value={role} onChange={e => setRole(e.target.value)}>
-            <option value="admin">Admin</option>
+            <option value="admin">Admin Shift</option>
+            <option value="admin_atas">Admin Atas</option>
             <option value="superadmin">Developer</option>
             <option value="viewer">Viewer</option>
           </select>

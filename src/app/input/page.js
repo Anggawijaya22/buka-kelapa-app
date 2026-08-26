@@ -97,7 +97,8 @@ export default function InputPage() {
     if (r === 'admin' && s) setShift(s);
   }, []);
 
-  const shiftOptions = role === 'admin' ? (myShift ? [myShift] : []) : ['shiftA', 'shiftB', 'shiftC'];
+  const isAdminAtas = role === 'admin_atas';
+  const shiftOptions = isAdminAtas ? [] : role === 'admin' ? (myShift ? [myShift] : []) : ['shiftA', 'shiftB', 'shiftC'];
 
   const [msgRekapLibur, setMsgRekapLibur] = useState({ type: '', text: '' });
   const [loadingRekapLibur, setLoadingRekapLibur] = useState(false);
@@ -142,7 +143,7 @@ export default function InputPage() {
     <div className="container">
       <Nav />
       <h1>Input Data</h1>
-      <p className="sub">Pilih shift dan waktu produksi</p>
+      <p className="sub">{isAdminAtas ? 'Isi rekap harian produksi' : 'Pilih shift dan waktu produksi'}</p>
 
       <PengajuanSaya />
 
@@ -196,17 +197,19 @@ export default function InputPage() {
         </div>
       )}
 
-      <div className="card">
-        <h2>📋 Rekap Harian</h2>
-        <p className="sub">Rekap gabungan semua shift — kirim manual</p>
-        <button className="secondary" onClick={() => router.push('/input/form?target=rekap')}>
-          📝 Isi Rekap Harian
-        </button>
-        <button className="danger" disabled={loadingRekapLibur} onClick={kirimLiburRekap} style={{ marginTop: 8 }}>
-          {loadingRekapLibur ? 'Mengirim...' : '⛔ LIBUR (Ketiga Shift) — kirim notif'}
-        </button>
-        {msgRekapLibur.text && <p className={msgRekapLibur.type}>{msgRekapLibur.text}</p>}
-      </div>
+      {role !== 'admin' && (
+        <div className="card">
+          <h2>📋 Rekap Harian</h2>
+          <p className="sub">Rekap gabungan semua shift — kirim manual</p>
+          <button className="secondary" onClick={() => router.push('/input/form?target=rekap')}>
+            📝 Isi Rekap Harian
+          </button>
+          <button className="danger" disabled={loadingRekapLibur} onClick={kirimLiburRekap} style={{ marginTop: 8 }}>
+            {loadingRekapLibur ? 'Mengirim...' : '⛔ LIBUR (Ketiga Shift) — kirim notif'}
+          </button>
+          {msgRekapLibur.text && <p className={msgRekapLibur.type}>{msgRekapLibur.text}</p>}
+        </div>
+      )}
     </div>
   );
 }

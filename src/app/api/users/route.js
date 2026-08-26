@@ -21,7 +21,7 @@ export async function POST(req) {
     return NextResponse.json({ error: 'Username wajib, password minimal 6 karakter' }, { status: 400 });
   }
 
-  const finalRole = ['superadmin', 'admin', 'viewer'].includes(role) ? role : 'admin';
+  const finalRole = ['superadmin', 'admin', 'admin_atas', 'viewer'].includes(role) ? role : 'admin';
   if (finalRole === 'admin' && shift && !VALID_SHIFTS.includes(shift)) {
     return NextResponse.json({ error: 'Shift tidak valid' }, { status: 400 });
   }

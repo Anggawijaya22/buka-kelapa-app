@@ -23,7 +23,7 @@ export default function LoginPage() {
     if (!res.ok) { setError(data.error); return; }
     sessionStorage.setItem('bk_role', data.role);
     sessionStorage.setItem('bk_shift', data.shift || '');
-    const dest = data.role === 'admin' ? '/input' : data.role === 'viewer' ? '/approval' : '/dashboard';
+    const dest = (data.role === 'admin' || data.role === 'admin_atas') ? '/input' : data.role === 'viewer' ? '/approval' : '/dashboard';
     router.push(dest);
   }
 

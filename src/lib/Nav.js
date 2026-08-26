@@ -19,13 +19,16 @@ export default function Nav() {
 
   const isSuper = role === 'superadmin';
   const isViewer = role === 'viewer';
+  const isAdminShift = role === 'admin';
+  const isAdminAtas = role === 'admin_atas';
   // superadmin (developer): semua menu
-  // admin: hanya Input Data + Password
+  // admin (admin shift): hanya Input Data (shift) + Password
+  // admin_atas (admin atas): hanya Input Data (rekap harian) + Password
   // viewer: hanya Approval + Password
 
   const links = [
     { href: '/dashboard', label: 'Dashboard', show: isSuper },
-    { href: '/input',     label: 'Input Data', show: role === 'admin' || isSuper },
+    { href: '/input',     label: 'Input Data', show: isAdminShift || isAdminAtas || isSuper },
     { href: '/history',   label: 'History',    show: isSuper },
     { href: '/approval',  label: '⚠️ Approval', show: isViewer || isSuper },
     { href: '/password',  label: 'Password',   show: true },
