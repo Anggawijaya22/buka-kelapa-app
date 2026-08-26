@@ -13,6 +13,11 @@ export const SHIFT_LABELS = {
   shiftC: 'Shift C (Pagi)'
 };
 
+// Label waktu shift yang SEBENARNYA dipilih user — dipakai utk header baris 4 di Excel
+// (B4/K4/Q4), supaya header ikut berubah sesuai pilihan Pagi/Siang/Malam, bukan patokan tetap.
+const WAKTU_LABELS = { pagi: 'Pagi', siang: 'Siang', malam: 'Malam' };
+const HEADER_ROW = 4;
+
 // Field manual per shift → row Excel
 // EF dan Total TIDAK ditulis — itu formula di Excel
 const SHIFT_ROWS = {
@@ -41,13 +46,19 @@ const PH_ROWS = [
   { line: 'E', labelRow: 33, valueRow: 34 }
 ];
 
-// Bangun map { "D5": nilai, "D6": nilai, ... } dari payload form shift
-export function buildShiftCellMap(target, form) {
+// Bangun map { "D5": nilai, "D6": nilai, ... } dari payload form shift.
+// waktu ('pagi'|'siang'|'malam') dipakai utk update header baris 4 (mis. "Shift A (Malam)")
+// mengikuti pilihan user saat itu, bukan cuma "Shift A (Siang)" yang tetap.
+export function buildShiftCellMap(target, form, waktu) {
   const col = SHIFT_COLS[target];
   const labelCol = LABEL_COLS[target];
   if (!col) throw new Error('Target shift tidak dikenal: ' + target);
 
   const map = {};
+
+  if (WAKTU_LABELS[waktu]) {
+    map[`${labelCol}${HEADER_ROW}`] = `Shift ${target.slice(-1)} (${WAKTU_LABELS[waktu]})`;
+  }
 
   // Field utama
   for (const [field, row] of Object.entries(SHIFT_ROWS)) {

@@ -188,6 +188,12 @@ action, detail jsonb, created_at
 > tanggal. Jadi histori yang akurat per tanggal HANYA ada di `submissions.payload`, bukan di Excel.
 > Ini alasan menu History baca dari Supabase, dan kenapa edit tanggal lampau tidak boleh menulis ke Excel.
 
+> ℹ️ **Header baris 4 ikut waktu yang dipilih.** Tiap kali submit/edit Shift A/B/C, cell header di baris 4
+> (`B4` utk Shift A, `K4` utk Shift B, `Q4` utk Shift C — kolom sama dgn label TGL/BK KLP shift itu) ikut
+> ditulis ulang jadi `"Shift <A/B/C> (<Pagi/Siang/Malam>)"` sesuai `waktu` yang benar-benar dipilih user,
+> bukan patokan tetap seperti sebelumnya. Logic ada di `buildShiftCellMap(target, form, waktu)` di
+> `src/lib/excel-map.js`.
+
 ---
 
 ## Migrasi SQL — Status

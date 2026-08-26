@@ -7,7 +7,7 @@ import { db, logAudit } from './db';
 // actorSession = pemilik data (admin yang submit awal) — dipakai untuk submissions & audit log,
 // supaya riwayat tetap tercatat atas nama admin walau eksekusinya dipicu oleh ACC viewer.
 export async function executeShiftSubmit({ target, waktu, form, actorSession, actionLabel }) {
-  const cellMap = buildShiftCellMap(target, form);
+  const cellMap = buildShiftCellMap(target, form, waktu);
   const written = await writeCells(cellMap);
 
   await db.from('submissions').insert({
@@ -47,7 +47,7 @@ export async function executeRekapSubmit({ form, actorSession, actionLabel }) {
 export async function executeShiftEdit({ id, target, waktu, mergedPayload, actorSession, writeToExcel }) {
   let written = [];
   if (writeToExcel) {
-    const cellMap = buildShiftCellMap(target, mergedPayload);
+    const cellMap = buildShiftCellMap(target, mergedPayload, waktu);
     written = await writeCells(cellMap);
   }
 
