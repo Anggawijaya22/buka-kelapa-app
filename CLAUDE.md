@@ -73,6 +73,26 @@ Admin input data langsung dari HP → tulis ke Excel OneDrive → n8n baca Excel
 > khusus Developer, sudah dihapus total termasuk `src/app/api/logs`). History versi baru ini adalah
 > monitor+edit data submission per tanggal (lihat bagian "Menu History (Monitor & Edit)" di bawah).
 
+### Form Input Data (validasi, draft, popup hasil)
+- **Semua field wajib diisi** (termasuk 15 field PH Santan) sebelum submit bisa jalan — divalidasi oleh
+  `validateProductionForm()` di `src/lib/ProductionFormFields.js`. Kalau ada yang kosong: submit diblokir
+  (tidak sampai memanggil API), muncul pesan "Data belum lengkap", field yang kosong ditandai merah
+  (class CSS `.field-error`) + ikon ⚠️ di labelnya. User harus isi 0 kalau memang tidak ada nilainya.
+- **KgInput** (`src/lib/KgInput.js`) sekarang menerima **koma ATAU titik** sebagai pemisah desimal saat
+  mengetik (keyboard angka HP Indonesia biasanya cuma punya tombol koma) — sebelumnya koma di-strip diam-
+  diam sehingga "79.911,00" jadi "7.991.100" yang salah total. Tampilan saat fokus menunjukkan persis apa
+  yang diketik user (termasuk komanya); setelah blur tetap diformat ribuan-titik/desimal-koma seperti biasa.
+  Kontrak `onChange` tidak berubah — tetap raw dot-decimal ("79911.00") untuk kompatibilitas Excel.
+- **Popup hasil submit**: `src/lib/useResultModal.js`, dipakai di submit Input Data, Simpan Perubahan
+  History, dan tombol LIBUR PRODUKSI. Sukses → "✅ DATA BERHASIL DIKIRIM" + tombol OK (kembali ke
+  menu/tutup, form/draft otomatis bersih). Gagal → "❌ DATA GAGAL DIKIRIM" + tombol "Kirim Ulang"
+  (retry pakai payload yang sama) atau "Kembali" (tutup, data isian tetap ada, tidak hilang).
+- **Draft otomatis + tombol Refresh**: HANYA di `/input/form` (input baru), TIDAK di History (edit).
+  Form auto-save ke `localStorage` (key `bk_draft_<target>_<waktu>`) tiap kali user mengetik. Kalau
+  HP/PC mati di tengah proses, buka lagi form yang sama → tombol "🔄 Refresh" muncul (kalau ada draft
+  tersimpan) → klik untuk memuat ulang isian sebelumnya (ada konfirmasi supaya tidak menimpa isian baru
+  yang sedang diketik tanpa sengaja). Draft dihapus otomatis setelah submit berhasil.
+
 ### Menu History (Monitor & Edit)
 - Route: `/history`, API: `src/app/api/history/route.js` (GET = lihat, PUT = edit).
 - Ada date picker (default hari ini). Data diambil dari tabel `submissions` (BUKAN dari Excel — Excel
@@ -218,7 +238,9 @@ C:\buka-kelapa-app\
 │   │                                executeShiftEdit/executeRekapEdit (update History)
 │   ├── ProductionFormFields.js   ← field form shift/rekap, dipakai bareng Input Data & History
 │   ├── cooldown.js, settings.js  ← logic cooldown submit & pengaturan
-│   └── useCooldown.js, CooldownNotice.js ← hook + komponen UI hitung mundur
+│   ├── useCooldown.js, CooldownNotice.js ← hook + komponen UI hitung mundur
+│   ├── useResultModal.js         ← popup "DATA BERHASIL/GAGAL DIKIRIM" (OK / Kirim Ulang / Kembali)
+│   └── KgInput.js                ← input angka format ID, terima koma ATAU titik sbg desimal
 ├── .env.local            ← credentials (jangan commit)
 ├── .mcp.json             ← Supabase MCP config (ref nrfbvhqjzfngyozduocw)
 ├── migration-admin-shift.sql        ← sudah dijalankan

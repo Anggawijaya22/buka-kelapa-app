@@ -54,3 +54,4 @@ th { color: var(--muted); font-weight: 600; font-size: 12px; }
 .badge.admin { background: #d1fae5; color: #065f46; }
 .badge.admin_atas { background: #dbeafe; color: #1e40af; }
 .badge.viewer { background: #e0e7ff; color: #3730a3; }
+.field-error { border-color: #dc2626 !important; background: #fef2f2; }

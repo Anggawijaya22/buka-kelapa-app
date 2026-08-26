@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import Nav from '@/lib/Nav';
 import CooldownNotice from '@/lib/CooldownNotice';
 import useCooldown from '@/lib/useCooldown';
+import useResultModal from '@/lib/useResultModal';
 
 const DISMISS_KEY = 'bk_dismissed_approvals';
 
@@ -87,7 +88,6 @@ export default function InputPage() {
   const [myShift, setMyShift] = useState('');
   const [shift, setShift] = useState('');
   const [waktu, setWaktu] = useState('');
-  const [msg, setMsg] = useState({ type: '', text: '' });
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -102,9 +102,9 @@ export default function InputPage() {
   const isAdminAtas = role === 'admin_atas';
   const shiftOptions = isAdminAtas ? [] : role === 'admin' ? (myShift ? [myShift] : []) : ['shiftA', 'shiftB', 'shiftC'];
 
-  const [msgRekapLibur, setMsgRekapLibur] = useState({ type: '', text: '' });
   const [loadingRekapLibur, setLoadingRekapLibur] = useState(false);
   const cooldown = useCooldown();
+  const { modal: resultModal, showSuccess, showError } = useResultModal();
 
   const WAKTU_EMOJI = { pagi: '🌅', siang: '☀️', malam: '🌙' };
 
@@ -112,11 +112,9 @@ export default function InputPage() {
     router.push(`/input/form?target=${shift}&waktu=${waktu}`);
   }
 
-  async function kirimLibur() {
+  async function doKirimLibur() {
     if (cooldown.remaining > 0) return;
-    if (!confirm(`Kirim notifikasi LIBUR PRODUKSI untuk Shift ${shift.slice(-1)} (${waktu.toUpperCase()})?\n\nPesan akan langsung terkirim ke WhatsApp Bos.`)) return;
     setLoading(true);
-    setMsg({ type: '', text: '' });
     const res = await fetch('/api/libur', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -125,19 +123,23 @@ export default function InputPage() {
     const d = await res.json();
     setLoading(false);
     if (!res.ok) {
-      setMsg({ type: 'error', text: d.error });
       if (d.cooldownRemainingSeconds) cooldown.start(d.cooldownRemainingSeconds);
+      showError(d.error, doKirimLibur);
       return;
     }
     if (d.cooldownSeconds) cooldown.start(d.cooldownSeconds);
-    setMsg({ type: 'success', text: '✅ Notifikasi LIBUR PRODUKSI terkirim ke Bos' });
+    showSuccess('Notifikasi LIBUR PRODUKSI terkirim ke Bos');
   }
 
-  async function kirimLiburRekap() {
+  function kirimLibur() {
     if (cooldown.remaining > 0) return;
-    if (!confirm('Kirim notifikasi LIBUR PRODUKSI untuk Rekap Harian (ketiga shift libur)?\n\nPesan akan langsung terkirim ke WhatsApp Bos.')) return;
+    if (!confirm(`Kirim notifikasi LIBUR PRODUKSI untuk Shift ${shift.slice(-1)} (${waktu.toUpperCase()})?\n\nPesan akan langsung terkirim ke WhatsApp Bos.`)) return;
+    doKirimLibur();
+  }
+
+  async function doKirimLiburRekap() {
+    if (cooldown.remaining > 0) return;
     setLoadingRekapLibur(true);
-    setMsgRekapLibur({ type: '', text: '' });
     const res = await fetch('/api/libur', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -146,17 +148,24 @@ export default function InputPage() {
     const d = await res.json();
     setLoadingRekapLibur(false);
     if (!res.ok) {
-      setMsgRekapLibur({ type: 'error', text: d.error });
       if (d.cooldownRemainingSeconds) cooldown.start(d.cooldownRemainingSeconds);
+      showError(d.error, doKirimLiburRekap);
       return;
     }
     if (d.cooldownSeconds) cooldown.start(d.cooldownSeconds);
-    setMsgRekapLibur({ type: 'success', text: '✅ Notifikasi LIBUR PRODUKSI (Rekap) terkirim ke Bos' });
+    showSuccess('Notifikasi LIBUR PRODUKSI (Rekap) terkirim ke Bos');
+  }
+
+  function kirimLiburRekap() {
+    if (cooldown.remaining > 0) return;
+    if (!confirm('Kirim notifikasi LIBUR PRODUKSI untuk Rekap Harian (ketiga shift libur)?\n\nPesan akan langsung terkirim ke WhatsApp Bos.')) return;
+    doKirimLiburRekap();
   }
 
   return (
     <div className="container">
       <Nav />
+      {resultModal}
       <h1>Input Data</h1>
       <p className="sub">{isAdminAtas ? 'Isi rekap harian produksi' : 'Pilih shift dan waktu produksi'}</p>
 
@@ -208,7 +217,6 @@ export default function InputPage() {
           <button className="danger" disabled={loading || cooldown.remaining > 0} onClick={kirimLibur}>
             {loading ? 'Mengirim...' : '⛔ LIBUR PRODUKSI (kirim notif)'}
           </button>
-          {msg.text && <p className={msg.type}>{msg.text}</p>}
           <CooldownNotice seconds={cooldown.remaining} />
         </div>
       )}
@@ -223,7 +231,6 @@ export default function InputPage() {
           <button className="danger" disabled={loadingRekapLibur || cooldown.remaining > 0} onClick={kirimLiburRekap} style={{ marginTop: 8 }}>
             {loadingRekapLibur ? 'Mengirim...' : '⛔ LIBUR (Ketiga Shift) — kirim notif'}
           </button>
-          {msgRekapLibur.text && <p className={msgRekapLibur.type}>{msgRekapLibur.text}</p>}
           <CooldownNotice seconds={cooldown.remaining} />
         </div>
       )}

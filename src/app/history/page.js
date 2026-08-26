@@ -1,9 +1,10 @@
 'use client';
 import { useState, useEffect } from 'react';
 import Nav from '@/lib/Nav';
-import ProductionFormFields, { emptyPh, phFromPayload, phToPayload } from '@/lib/ProductionFormFields';
+import ProductionFormFields, { emptyPh, phFromPayload, phToPayload, validateProductionForm } from '@/lib/ProductionFormFields';
 import CooldownNotice from '@/lib/CooldownNotice';
 import useCooldown from '@/lib/useCooldown';
+import useResultModal from '@/lib/useResultModal';
 
 const TARGET_LABELS = { shiftA: 'Shift A', shiftB: 'Shift B', shiftC: 'Shift C', rekap: '📋 Rekap Harian' };
 
@@ -50,13 +51,15 @@ function EditForm({ item, cooldown, onSaved, onCancel }) {
   const isRekap = item.target === 'rekap';
   const [form, setForm] = useState({ ...item.payload });
   const [ph, setPh] = useState(isRekap ? emptyPh() : phFromPayload(item.payload?.phSantan));
+  const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState({ type: '', text: '' });
+  const { modal: resultModal, showSuccess, showError } = useResultModal();
 
   function set(field, value) { setForm(f => ({ ...f, [field]: value })); }
   function setPhField(line, key, value) { setPh(p => ({ ...p, [line]: { ...p[line], [key]: value } })); }
 
-  async function save() {
+  async function doSave() {
     if (cooldown.remaining > 0) return;
     setSaving(true);
     setMsg({ type: '', text: '' });
@@ -73,23 +76,35 @@ function EditForm({ item, cooldown, onSaved, onCancel }) {
     setSaving(false);
 
     if (!res.ok) {
-      setMsg({ type: 'error', text: data.error });
       if (data.cooldownRemainingSeconds) cooldown.start(data.cooldownRemainingSeconds);
+      showError(data.error, doSave);
       return;
     }
     if (data.cooldownSeconds) cooldown.start(data.cooldownSeconds);
 
     let text = data.wroteToExcel
-      ? `✅ Perubahan tersimpan & ${data.cellsWritten} cell diupdate ke Excel.`
-      : '✅ Perubahan tersimpan ke riwayat. Tanggal ini bukan hari ini, jadi Excel (laporan live) tidak disentuh.';
+      ? `Perubahan tersimpan & ${data.cellsWritten} cell diupdate ke Excel.`
+      : 'Perubahan tersimpan ke riwayat. Tanggal ini bukan hari ini, jadi Excel (laporan live) tidak disentuh.';
     text += data.waSent ? ' Notifikasi WA terkirim 📨' : ` ⚠️ ${data.warn || 'WA tidak terkirim'}`;
-    setMsg({ type: 'success', text });
-    onSaved?.();
+    showSuccess(text, () => onSaved?.());
+  }
+
+  function save() {
+    if (cooldown.remaining > 0) return;
+    const { valid, errors: newErrors } = validateProductionForm(isRekap, form, ph);
+    setErrors(newErrors);
+    if (!valid) {
+      setMsg({ type: 'error', text: '⚠️ Data belum lengkap. Isi semua kolom yang ditandai merah (boleh isi 0 kalau memang tidak ada nilainya).' });
+      return;
+    }
+    setMsg({ type: '', text: '' });
+    doSave();
   }
 
   return (
     <div>
-      <ProductionFormFields isRekap={isRekap} form={form} set={set} ph={ph} setPhField={setPhField} />
+      {resultModal}
+      <ProductionFormFields isRekap={isRekap} form={form} set={set} ph={ph} setPhField={setPhField} errors={errors} />
       {msg.text && <p className={msg.type}>{msg.text}</p>}
       <CooldownNotice seconds={cooldown.remaining} />
       <button type="button" disabled={saving || cooldown.remaining > 0} onClick={save}>

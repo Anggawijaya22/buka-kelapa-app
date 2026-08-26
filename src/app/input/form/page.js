@@ -1,10 +1,11 @@
 'use client';
-import { useState, Suspense } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Nav from '@/lib/Nav';
-import ProductionFormFields, { emptyPh, phToPayload } from '@/lib/ProductionFormFields';
+import ProductionFormFields, { emptyPh, phToPayload, validateProductionForm } from '@/lib/ProductionFormFields';
 import CooldownNotice from '@/lib/CooldownNotice';
 import useCooldown from '@/lib/useCooldown';
+import useResultModal from '@/lib/useResultModal';
 
 const WAKTU_EMOJI = { pagi: '🌅', siang: '☀️', malam: '🌙' };
 
@@ -60,13 +61,17 @@ function FormInner() {
   const target = params.get('target');
   const waktu = params.get('waktu') || '';
   const isRekap = target === 'rekap';
+  const draftKey = `bk_draft_${target}_${waktu || 'x'}`;
 
   const [form, setForm] = useState({ tanggal: todayStr() });
   const [ph, setPh] = useState(emptyPh());
+  const [errors, setErrors] = useState({});
   const [msg, setMsg] = useState({ type: '', text: '' });
   const [loading, setLoading] = useState(false);
+  const [hasDraft, setHasDraft] = useState(false);
   const [anomaliModal, confirmAnomali] = useAnomaliConfirm();
   const cooldown = useCooldown();
+  const { modal: resultModal, showSuccess, showError } = useResultModal();
 
   function set(field, value) {
     setForm(f => ({ ...f, [field]: value }));
@@ -75,8 +80,36 @@ function FormInner() {
     setPh(p => ({ ...p, [line]: { ...p[line], [key]: value } }));
   }
 
+  // Simpan draft tiap kali form berubah — jaga-jaga HP/PC mati di tengah proses input.
+  // Dibersihkan otomatis setelah submit berhasil (lihat clearDraft di bawah).
+  useEffect(() => {
+    try { localStorage.setItem(draftKey, JSON.stringify({ form, ph })); } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form, ph]);
+
+  useEffect(() => {
+    try { setHasDraft(!!localStorage.getItem(draftKey)); } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function clearDraft() {
+    try { localStorage.removeItem(draftKey); } catch {}
+    setHasDraft(false);
+  }
+
+  function restoreDraft() {
+    if (!confirm('Muat draft tersimpan? Ini akan menimpa data yang sedang Anda ketik di form ini.')) return;
+    try {
+      const raw = localStorage.getItem(draftKey);
+      if (!raw) return;
+      const d = JSON.parse(raw);
+      if (d.form) setForm(d.form);
+      if (d.ph) setPh(d.ph);
+    } catch {}
+  }
+
   // Cek anomali EF WM shift SEBELUM kirim — dihitung sendiri di app (EF WM = Kg WM / Buka Kelapa)
-  // sama seperti formula Excel. Hanya MENDETEKSI, tidak menampilkan dialog — dialog diatur di submit().
+  // sama seperti formula Excel. Hanya MENDETEKSI, tidak menampilkan dialog — dialog diatur di doSubmit().
   function deteksiAnomaliShift() {
     const bkKlpNum = parseFloat(form.bkKlp);
     const kgWmNum = parseFloat(form.kgWm);
@@ -118,11 +151,9 @@ function FormInner() {
     }
   }
 
-  async function submit(e) {
-    e.preventDefault();
+  async function doSubmit() {
+    if (cooldown.remaining > 0) return;
     setMsg({ type: '', text: '' });
-
-    if (cooldown.remaining > 0) return; // tombol sudah disabled, jaga-jaga submit via Enter
 
     const deteksi = isRekap ? await deteksiAnomaliRekap() : deteksiAnomaliShift();
 
@@ -151,14 +182,15 @@ function FormInner() {
       setLoading(false);
 
       if (!res.ok) {
-        setMsg({ type: 'error', text: data.error });
         if (data.cooldownRemainingSeconds) cooldown.start(data.cooldownRemainingSeconds);
+        showError(data.error, doSubmit);
         return;
       }
       if (data.cooldownSeconds) cooldown.start(data.cooldownSeconds);
       let anomaliText = '📨 Data anomali terkirim ke Viewer untuk persetujuan. Excel belum diupdate sampai di-ACC.';
       anomaliText += data.waSent ? ' Notifikasi WA ke Viewer terkirim 📱' : ' (Notifikasi WA gagal terkirim, tapi tetap bisa dilihat Viewer di app)';
-      setMsg({ type: 'success', text: anomaliText });
+      clearDraft();
+      showSuccess(anomaliText, () => router.push('/input'));
       return;
     }
 
@@ -187,14 +219,29 @@ function FormInner() {
     setLoading(false);
 
     if (!res.ok) {
-      setMsg({ type: 'error', text: data.error });
       if (data.cooldownRemainingSeconds) cooldown.start(data.cooldownRemainingSeconds);
+      showError(data.error, doSubmit);
       return;
     }
     if (data.cooldownSeconds) cooldown.start(data.cooldownSeconds);
-    let text = `✅ ${data.cellsWritten} cell tersimpan ke Excel.`;
+    let text = `${data.cellsWritten} cell tersimpan ke Excel.`;
     text += data.waSent ? ' Laporan WA sedang dikirim 📨' : ` ⚠️ ${data.warn || 'WA tidak terkirim'}`;
-    setMsg({ type: data.waSent ? 'success' : 'error', text });
+    clearDraft();
+    showSuccess(text, () => router.push('/input'));
+  }
+
+  function handleSubmit(e) {
+    e.preventDefault();
+    if (cooldown.remaining > 0) return;
+
+    const { valid, errors: newErrors } = validateProductionForm(isRekap, form, ph);
+    setErrors(newErrors);
+    if (!valid) {
+      setMsg({ type: 'error', text: '⚠️ Data belum lengkap. Isi semua kolom yang ditandai merah (boleh isi 0 kalau memang tidak ada nilainya).' });
+      return;
+    }
+    setMsg({ type: '', text: '' });
+    doSubmit();
   }
 
   const title = isRekap
@@ -207,16 +254,24 @@ function FormInner() {
     <div className="container">
       <Nav />
       {anomaliModal}
-      <h1>{title}</h1>
-      <p className="sub">Field kosong tidak akan menimpa isi Excel. Setelah simpan, laporan WA otomatis terkirim.</p>
+      {resultModal}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+        <h1>{title}</h1>
+        {hasDraft && (
+          <button type="button" className="secondary" style={{ width: 'auto', padding: '6px 14px', marginTop: 0 }} onClick={restoreDraft}>
+            🔄 Refresh
+          </button>
+        )}
+      </div>
+      <p className="sub">Semua kolom wajib diisi (boleh 0 kalau memang tidak ada nilainya). Setelah simpan, laporan WA otomatis terkirim.</p>
 
-      <form onSubmit={submit}>
+      <form onSubmit={handleSubmit}>
         <div className="card">
           <label>Tanggal *</label>
           <input type="date" value={form.tanggal} onChange={e => set('tanggal', e.target.value)} required />
         </div>
 
-        <ProductionFormFields isRekap={isRekap} form={form} set={set} ph={ph} setPhField={setPhField} />
+        <ProductionFormFields isRekap={isRekap} form={form} set={set} ph={ph} setPhField={setPhField} errors={errors} />
 
         {msg.text && <p className={msg.type}>{msg.text}</p>}
         <CooldownNotice seconds={cooldown.remaining} />
