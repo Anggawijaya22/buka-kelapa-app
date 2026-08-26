@@ -1,46 +1,177 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useState, useEffect } from 'react';
 import Nav from '@/lib/Nav';
+import ProductionFormFields, { emptyPh, phFromPayload, phToPayload } from '@/lib/ProductionFormFields';
+import CooldownNotice from '@/lib/CooldownNotice';
+import useCooldown from '@/lib/useCooldown';
+
+const TARGET_LABELS = { shiftA: 'Shift A', shiftB: 'Shift B', shiftC: 'Shift C', rekap: '📋 Rekap Harian' };
+
+const FIELD_LABELS_SHIFT = {
+  bkKlp: 'Buka Kelapa (Kg)', pakaiJmbl: 'Pakai Jambul (Kg)', rijek: 'Rijek', sisaKlp: 'Sisa Kelapa',
+  khdrnSh: 'Kehadiran Sheller', rt2Sh: 'Rata-rata Sheller', khdrnPr: 'Kehadiran Parer', rt2Pr: 'Rata-rata Parer',
+  kgWm: 'Kg White Meat', airMp1: 'Air MP1 (Kg)', airMp2: 'Air MP2 (Kg)'
+};
+const FIELD_LABELS_REKAP = {
+  stokPetak: 'Stok Petak (Kg)', stokBufer: 'Stok Bufer (Kg)', akumBkKlp: 'Akum BK KLP (Kg)', akumAir: 'Akum Air MP1+MP2 (Kg)',
+  efFcwMp12: 'EF FCW MP1+MP2', dc: 'DC (Kg)', akumDc: 'Akum DC (Kg)', santanLA: 'Santan L.A (Kg)',
+  ttlSantan: 'TTL Santan (Kg)', akumSantan: 'Akum Santan (Kg)', sisaKlp: 'Sisa Kelapa'
+};
+
+function todayStr() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function waktuLabel(w) {
+  return { pagi: '🌅 Pagi', siang: '☀️ Siang', malam: '🌙 Malam' }[w] || w || '';
+}
+
+function Ringkasan({ item }) {
+  const isRekap = item.target === 'rekap';
+  const labels = isRekap ? FIELD_LABELS_REKAP : FIELD_LABELS_SHIFT;
+  const p = item.payload || {};
+  const rows = Object.entries(labels).filter(([key]) => p[key] !== undefined && p[key] !== '');
+
+  return (
+    <table style={{ fontSize: 13 }}>
+      <tbody>
+        {!isRekap && p.waktu && (
+          <tr><td style={{ color: 'var(--muted)', paddingRight: 12 }}>Waktu Shift</td><td>{waktuLabel(p.waktu)}</td></tr>
+        )}
+        {rows.map(([key, label]) => (
+          <tr key={key}><td style={{ color: 'var(--muted)', paddingRight: 12 }}>{label}</td><td>{String(p[key])}</td></tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+function EditForm({ item, cooldown, onSaved, onCancel }) {
+  const isRekap = item.target === 'rekap';
+  const [form, setForm] = useState({ ...item.payload });
+  const [ph, setPh] = useState(isRekap ? emptyPh() : phFromPayload(item.payload?.phSantan));
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState({ type: '', text: '' });
+
+  function set(field, value) { setForm(f => ({ ...f, [field]: value })); }
+  function setPhField(line, key, value) { setPh(p => ({ ...p, [line]: { ...p[line], [key]: value } })); }
+
+  async function save() {
+    if (cooldown.remaining > 0) return;
+    setSaving(true);
+    setMsg({ type: '', text: '' });
+
+    const payload = { ...form };
+    if (!isRekap) payload.phSantan = phToPayload(ph);
+
+    const res = await fetch('/api/history', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: item.id, form: payload })
+    });
+    const data = await res.json();
+    setSaving(false);
+
+    if (!res.ok) {
+      setMsg({ type: 'error', text: data.error });
+      if (data.cooldownRemainingSeconds) cooldown.start(data.cooldownRemainingSeconds);
+      return;
+    }
+    if (data.cooldownSeconds) cooldown.start(data.cooldownSeconds);
+
+    let text = data.wroteToExcel
+      ? `✅ Perubahan tersimpan & ${data.cellsWritten} cell diupdate ke Excel.`
+      : '✅ Perubahan tersimpan ke riwayat. Tanggal ini bukan hari ini, jadi Excel (laporan live) tidak disentuh.';
+    text += data.waSent ? ' Notifikasi WA terkirim 📨' : ` ⚠️ ${data.warn || 'WA tidak terkirim'}`;
+    setMsg({ type: 'success', text });
+    onSaved?.();
+  }
+
+  return (
+    <div>
+      <ProductionFormFields isRekap={isRekap} form={form} set={set} ph={ph} setPhField={setPhField} />
+      {msg.text && <p className={msg.type}>{msg.text}</p>}
+      <CooldownNotice seconds={cooldown.remaining} />
+      <button type="button" disabled={saving || cooldown.remaining > 0} onClick={save}>
+        {saving ? 'Menyimpan...' : '💾 Simpan Perubahan'}
+      </button>
+      <button type="button" className="secondary" onClick={onCancel}>Batal</button>
+    </div>
+  );
+}
+
+function Section({ item, cooldown, onChanged }) {
+  const [editing, setEditing] = useState(false);
+  const label = TARGET_LABELS[item.target] || item.target;
+
+  if (!item.id) {
+    return (
+      <div className="card">
+        <h2>{label}</h2>
+        <p className="sub">Belum ada data untuk tanggal ini.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="card">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <h2>{label}</h2>
+        {!editing && (
+          <button type="button" className="secondary" style={{ width: 'auto', padding: '6px 14px', marginTop: 0 }} onClick={() => setEditing(true)}>
+            ✏️ Edit
+          </button>
+        )}
+      </div>
+      <p className="sub">
+        Dikirim {new Date(item.created_at).toLocaleString('id-ID', { dateStyle: 'short', timeStyle: 'short' })} oleh {item.username || '-'}
+        {item.edited_at && ` · diedit terakhir ${new Date(item.edited_at).toLocaleString('id-ID', { dateStyle: 'short', timeStyle: 'short' })} oleh ${item.edited_by_username || '-'}`}
+      </p>
+      {editing ? (
+        <EditForm
+          item={item}
+          cooldown={cooldown}
+          onCancel={() => setEditing(false)}
+          onSaved={() => { setEditing(false); onChanged(); }}
+        />
+      ) : (
+        <Ringkasan item={item} />
+      )}
+    </div>
+  );
+}
 
 export default function HistoryPage() {
-  const [logs, setLogs] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [role, setRole] = useState('');
-  const [clearing, setClearing] = useState(false);
-  const [msg, setMsg] = useState('');
+  const [tanggal, setTanggal] = useState(todayStr());
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [forbidden, setForbidden] = useState(false);
+  const cooldown = useCooldown();
 
   useEffect(() => {
     setRole(sessionStorage.getItem('bk_role') || '');
-    loadLogs();
   }, []);
 
-  async function loadLogs() {
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tanggal]);
+
+  async function load() {
     setLoading(true);
-    const res = await fetch('/api/logs');
+    const res = await fetch(`/api/history?tanggal=${tanggal}`);
     if (res.status === 403) { setForbidden(true); setLoading(false); return; }
     const d = await res.json();
-    setLogs(d.logs || []);
+    setItems(d.items || []);
     setLoading(false);
-  }
-
-  async function hapusLog() {
-    if (!confirm('Hapus SEMUA log aktivitas? Tindakan ini tidak bisa dibatalkan.')) return;
-    setClearing(true);
-    setMsg('');
-    const res = await fetch('/api/logs', { method: 'DELETE' });
-    const d = await res.json();
-    setClearing(false);
-    if (!res.ok) { setMsg('❌ ' + d.error); return; }
-    setMsg('✅ Semua log berhasil dihapus');
-    setLogs([]);
   }
 
   if (forbidden) {
     return (
       <div className="container">
         <Nav />
-        <div className="card"><p className="error">Halaman ini hanya untuk Developer</p></div>
+        <div className="card"><p className="error">Anda tidak punya akses ke halaman ini</p></div>
       </div>
     );
   }
@@ -48,39 +179,22 @@ export default function HistoryPage() {
   return (
     <div className="container">
       <Nav />
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-        <h1>History Aktivitas</h1>
-        {role === 'superadmin' && (
-          <button
-            className="danger"
-            disabled={clearing || logs.length === 0}
-            onClick={hapusLog}
-            style={{ width: 'auto', padding: '8px 16px', fontSize: 13, marginTop: 0 }}
-          >
-            {clearing ? 'Menghapus...' : '🗑️ Hapus Log'}
-          </button>
-        )}
+      <h1>History</h1>
+      <p className="sub">
+        {role === 'admin'
+          ? 'Riwayat data shift Anda — bisa dicek dan diedit'
+          : 'Pantau & edit data Shift A/B/C serta Rekap Harian'}
+      </p>
+
+      <div className="card">
+        <label>Tanggal</label>
+        <input type="date" value={tanggal} max={todayStr()} onChange={e => setTanggal(e.target.value)} />
       </div>
-      {msg && <p style={{ fontSize: 13, marginBottom: 8, color: msg.startsWith('✅') ? 'var(--primary)' : '#dc2626' }}>{msg}</p>}
-      <div className="card" style={{ overflowX: 'auto' }}>
-        {loading && <p>Memuat...</p>}
-        {!loading && logs.length === 0 && <p className="sub">Belum ada aktivitas</p>}
-        {logs.length > 0 && (
-          <table>
-            <thead><tr><th>Waktu</th><th>User</th><th>Aksi</th><th>Detail</th></tr></thead>
-            <tbody>
-              {logs.map(l => (
-                <tr key={l.id}>
-                  <td>{new Date(l.created_at).toLocaleString('id-ID', { dateStyle: 'short', timeStyle: 'short' })}</td>
-                  <td>{l.username}</td>
-                  <td>{l.action}</td>
-                  <td>{l.detail ? JSON.stringify(l.detail) : '-'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+
+      {loading && <p>Memuat...</p>}
+      {!loading && items.map(item => (
+        <Section key={item.target} item={item} cooldown={cooldown} onChanged={load} />
+      ))}
     </div>
   );
 }

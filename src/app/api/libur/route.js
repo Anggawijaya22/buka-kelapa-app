@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { logAudit } from '@/lib/db';
 import { triggerN8n } from '@/lib/n8n';
+import { checkCooldown, markSubmitted } from '@/lib/cooldown';
+import { getCooldownMinutes } from '@/lib/settings';
 
 export async function POST(req) {
   const auth = await requireAuth();
@@ -32,6 +34,11 @@ export async function POST(req) {
     }
   }
 
+  const cd = await checkCooldown(auth.session);
+  if (!cd.ok) {
+    return NextResponse.json({ error: `Tunggu ${cd.remainingSeconds} detik lagi sebelum submit berikutnya`, cooldownRemainingSeconds: cd.remainingSeconds }, { status: 429 });
+  }
+
   // Shift libur (shiftA/B/C + waktu) pakai N8N_WEBHOOK_LIBUR.
   // Rekap libur (ketiga shift libur sekaligus) pakai webhook terpisah N8N_WEBHOOK_LIBUR_REKAP.
   const webhookUrl = isRekap ? process.env.N8N_WEBHOOK_LIBUR_REKAP : process.env.N8N_WEBHOOK_LIBUR;
@@ -42,5 +49,7 @@ export async function POST(req) {
   if (!n8n.ok) {
     return NextResponse.json({ error: n8n.warn }, { status: 500 });
   }
-  return NextResponse.json({ ok: true });
+  await markSubmitted(auth.session.id);
+  const cooldownMinutes = await getCooldownMinutes();
+  return NextResponse.json({ ok: true, cooldownSeconds: cooldownMinutes * 60 });
 }

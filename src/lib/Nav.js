@@ -22,17 +22,18 @@ export default function Nav() {
   const isAdminShift = role === 'admin';
   const isAdminAtas = role === 'admin_atas';
   // superadmin (developer): semua menu
-  // admin (admin shift): hanya Input Data (shift) + Password
-  // admin_atas (admin atas): hanya Input Data (rekap harian) + Password
+  // admin (admin shift): Input Data (shift) + History (shift sendiri) + Password
+  // admin_atas (admin atas): Input Data (rekap harian) + History (semua shift + rekap) + Password
   // viewer: hanya Approval + Password
 
   const links = [
-    { href: '/dashboard', label: 'Dashboard', show: isSuper },
-    { href: '/input',     label: 'Input Data', show: isAdminShift || isAdminAtas || isSuper },
-    { href: '/history',   label: 'History',    show: isSuper },
-    { href: '/approval',  label: '⚠️ Approval', show: isViewer || isSuper },
-    { href: '/password',  label: 'Password',   show: true },
-    { href: '/users',     label: 'Users',      show: isSuper },
+    { href: '/dashboard',   label: 'Dashboard',    show: isSuper },
+    { href: '/input',       label: 'Input Data',   show: isAdminShift || isAdminAtas || isSuper },
+    { href: '/history',     label: 'History',      show: isAdminShift || isAdminAtas || isSuper },
+    { href: '/approval',    label: '⚠️ Approval',  show: isViewer || isSuper },
+    { href: '/password',    label: 'Password',     show: true },
+    { href: '/users',       label: 'Users',        show: isSuper },
+    { href: '/pengaturan',  label: '⚙️ Pengaturan', show: isSuper },
   ];
 
   return (

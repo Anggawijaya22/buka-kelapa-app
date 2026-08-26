@@ -63,15 +63,51 @@ Admin input data langsung dari HP → tulis ke Excel OneDrive → n8n baca Excel
 - Admin Atas tidak punya kolom `shift` (selalu null) dan tidak bisa input data shift (diblokir di `api/shift`, `api/libur` non-rekap, `api/approvals` non-rekap).
 
 ### Menu per Role
-- **Dashboard, History, Users:** hanya Developer (superadmin)
+- **Dashboard, Users, Pengaturan:** hanya Developer (superadmin)
 - **Input Data:** Admin Shift (shift terbatas, tanpa Rekap Harian) + Admin Atas (hanya Rekap Harian) + Developer (semua)
+- **History:** Admin Shift (hanya data shift miliknya sendiri, bisa edit) + Admin Atas (data shiftA/B/C + rekap, bisa edit semua) + Developer (semua, bisa edit semua)
 - **Approval:** viewer + Developer
 - **Password:** semua role
 
+> ⚠️ Menu **History** yang SEKARANG berbeda total dari History versi lama (yang dulu isinya audit log,
+> khusus Developer, sudah dihapus total termasuk `src/app/api/logs`). History versi baru ini adalah
+> monitor+edit data submission per tanggal (lihat bagian "Menu History (Monitor & Edit)" di bawah).
+
+### Menu History (Monitor & Edit)
+- Route: `/history`, API: `src/app/api/history/route.js` (GET = lihat, PUT = edit).
+- Ada date picker (default hari ini). Data diambil dari tabel `submissions` (BUKAN dari Excel — Excel
+  cuma snapshot "live" tanpa histori per tanggal, lihat catatan Excel di bawah).
+- **Admin Shift:** hanya lihat & edit data shift yang ditugaskan ke dirinya (`target === session.shift`),
+  tidak bisa lihat shift lain atau rekap.
+- **Admin Atas & Developer:** lihat & edit shiftA/B/C + rekap, semua tanggal.
+- Tanggal yang belum pernah ada submission-nya tampil "Belum ada data" — **tidak bisa diisi dari sini**,
+  input pertama kali tetap wajib lewat menu Input Data.
+- Edit MENIMPA payload submission yang sama (UPDATE, bukan INSERT baru) via `executeShiftEdit`/
+  `executeRekapEdit` di `src/lib/submitFlow.js`. Field `tanggal`/`tanggalIso`/`waktu` tidak bisa diubah
+  lewat edit (immutable per record).
+- **Excel HANYA ditulis kalau tanggal yang diedit = hari ini** (`writeToExcel = existing.tanggal === todayIso()`).
+  Edit ke tanggal lampau cuma update Supabase, Excel (laporan live) tidak disentuh — supaya edit data lama
+  tidak menimpa laporan hari ini yang sedang dipakai n8n.
+- Edit tetap trigger WA (sama seperti submit awal), tapi kena cooldown submit (lihat di bawah).
+
+### Cooldown Submit (anti-spam WA)
+- Berlaku untuk **Admin Shift & Admin Atas**, di SEMUA aksi yang trigger WA: submit awal (`api/shift`,
+  `api/rekap`), submit anomali (`api/approvals` POST), kirim notif libur (`api/libur`), dan edit History
+  (`api/history` PUT). **Developer (superadmin) tidak kena cooldown.**
+- Per-user (bukan per-record): begitu 1 aksi submit berhasil, user itu harus tunggu N menit sebelum bisa
+  submit aksi APA PUN lagi. Dilacak lewat kolom `users.last_submit_at`, dicek/di-update oleh
+  `src/lib/cooldown.js` (`checkCooldown`, `markSubmitted`).
+- Durasi default **3 menit**, disimpan di tabel `app_settings` (key `submit_cooldown_minutes`), bisa
+  diubah Developer lewat menu **Pengaturan** (`/pengaturan`, API `src/app/api/settings/route.js`) tanpa
+  perlu ubah kode.
+- UI: hitung mundur ditampilkan via hook `src/lib/useCooldown.js` + komponen `src/lib/CooldownNotice.js`,
+  dipakai di halaman Input Data dan History. Tombol submit/simpan otomatis ke-disable selama cooldown.
+
 ### Notifikasi WhatsApp
-- Laporan WA dikirim saat admin **submit** (webhook trigger ke n8n)
+- Laporan WA dikirim saat admin **submit** (webhook trigger ke n8n) — termasuk saat edit lewat History
 - Rekap harian: manual trigger
 - Tombol "LIBUR PRODUKSI" di app → kirim notif langsung ke bos
+- Semua aksi WA di atas kena Cooldown Submit (lihat di atas)
 
 ---
 
@@ -79,17 +115,28 @@ Admin input data langsung dari HP → tulis ke Excel OneDrive → n8n baca Excel
 
 ### `users`
 ```sql
-id, username, password_hash, role ('superadmin'|'admin'|'viewer'),
-shift ('A'|'B'|'C'|null),   -- null = superadmin/viewer, wajib untuk admin
+id, username, password_hash, role ('superadmin'|'admin'|'admin_atas'|'viewer'),
+shift ('shiftA'|'shiftB'|'shiftC'|null),   -- wajib utk admin, null utk role lain
+last_submit_at timestamptz,                -- dasar cooldown submit, lihat Cooldown Submit
 created_at, updated_at
 ```
 
 ### `submissions`
 ```sql
-id, user_id (→ users.id ON DELETE SET NULL),
-shift, waktu ('pagi'|'siang'|'malam'),
-data jsonb, created_at
+id bigint identity, user_id (→ users.id ON DELETE SET NULL), username text,
+target text ('shiftA'|'shiftB'|'shiftC'|'rekap'),   -- 'waktu' pagi/siang/malam ada DI DALAM payload, bukan kolom sendiri
+tanggal date, payload jsonb,                         -- payload = seluruh isi form yang disubmit (sumber histori)
+edited_at timestamptz, edited_by_id (→ users.id ON DELETE SET NULL), edited_by_username text,
+created_at timestamptz
 ```
+> Tidak ada unique constraint di `(target, tanggal)` — bisa ada beberapa baris kalau pernah disubmit
+> ulang; "data terkini" = baris dengan `created_at` terbaru per target+tanggal (lihat `api/history` GET).
+
+### `app_settings`
+```sql
+key text primary key, value text, updated_at timestamptz
+```
+Key-value pengaturan aplikasi. Saat ini cuma dipakai untuk `submit_cooldown_minutes` (default `'3'`).
 
 ### `audit_logs`
 ```sql
@@ -100,6 +147,11 @@ action, detail jsonb, created_at
 > ⚠️ **FK constraint:** `audit_logs.user_id` dan `submissions.user_id` pakai `ON DELETE SET NULL`
 > (sudah dimigrasi — hapus user tidak akan gagal, log tetap ada dengan user_id null)
 
+> ⚠️ **Excel bukan buku besar per-tanggal.** Sheet "Laporan SMS 2 (KG)" cuma punya 1 baris/kolom
+> "live" per shift (misal Shift A selalu kolom D baris 5-34, apa pun tanggalnya) — bukan 1 baris per
+> tanggal. Jadi histori yang akurat per tanggal HANYA ada di `submissions.payload`, bukan di Excel.
+> Ini alasan menu History baca dari Supabase, dan kenapa edit tanggal lampau tidak boleh menulis ke Excel.
+
 ---
 
 ## Migrasi SQL — Status
@@ -109,6 +161,7 @@ action, detail jsonb, created_at
 | `migration-admin-shift.sql` | ✅ SUDAH dijalankan (kolom `shift` di tabel `users`) |
 | `migration-fix-delete-user.sql` | ✅ SUDAH dijalankan (FK ON DELETE SET NULL untuk audit_logs & submissions) |
 | `add_admin_atas_role` (via MCP, tanpa file lokal) | ✅ SUDAH dijalankan (`users_role_check` diperluas untuk mengizinkan `admin_atas`) |
+| `add_history_edit_and_cooldown_support` (via MCP, tanpa file lokal) | ✅ SUDAH dijalankan (tabel `app_settings`, kolom `users.last_submit_at`, kolom `submissions.edited_at`/`edited_by_id`/`edited_by_username`) |
 
 > Untuk migrasi berikutnya: **gunakan Supabase MCP `apply_migration`** — tidak perlu copy-paste ke SQL Editor manual.
 
@@ -149,11 +202,23 @@ ONEDRIVE_FILE_ID=...
 C:\buka-kelapa-app\
 ├── src/app/
 │   ├── api/
-│   │   ├── shift/        ← validasi shift admin server-side
-│   │   ├── approvals/    ← validasi shift admin server-side
-│   │   ├── libur/        ← validasi shift admin server-side
+│   │   ├── shift/        ← validasi shift admin server-side + cooldown
+│   │   ├── rekap/        ← khusus admin_atas/superadmin + cooldown
+│   │   ├── approvals/    ← validasi shift admin server-side + cooldown
+│   │   ├── libur/        ← validasi shift admin server-side + cooldown
+│   │   ├── history/      ← GET (lihat) & PUT (edit) submission lama, dipakai menu History
+│   │   ├── settings/     ← GET/PUT pengaturan (cooldown minutes), PUT khusus superadmin
+│   │   ├── cooldown/     ← GET sisa cooldown user yang login, dipakai init hitung mundur di client
 │   │   └── users/        ← route.js sudah fix silent fail delete
-│   └── (pages)/
+│   ├── history/          ← menu History (monitor & edit submission per tanggal)
+│   ├── pengaturan/       ← menu Pengaturan (khusus Developer)
+│   └── (pages lain)/
+├── src/lib/
+│   ├── submitFlow.js             ← executeShiftSubmit/executeRekapSubmit (insert baru) +
+│   │                                executeShiftEdit/executeRekapEdit (update History)
+│   ├── ProductionFormFields.js   ← field form shift/rekap, dipakai bareng Input Data & History
+│   ├── cooldown.js, settings.js  ← logic cooldown submit & pengaturan
+│   └── useCooldown.js, CooldownNotice.js ← hook + komponen UI hitung mundur
 ├── .env.local            ← credentials (jangan commit)
 ├── .mcp.json             ← Supabase MCP config (ref nrfbvhqjzfngyozduocw)
 ├── migration-admin-shift.sql        ← sudah dijalankan

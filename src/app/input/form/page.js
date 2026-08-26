@@ -2,7 +2,9 @@
 import { useState, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Nav from '@/lib/Nav';
-import KgInput from '@/lib/KgInput';
+import ProductionFormFields, { emptyPh, phToPayload } from '@/lib/ProductionFormFields';
+import CooldownNotice from '@/lib/CooldownNotice';
+import useCooldown from '@/lib/useCooldown';
 
 const WAKTU_EMOJI = { pagi: '🌅', siang: '☀️', malam: '🌙' };
 
@@ -16,10 +18,6 @@ function todayStr() {
 function toExcelDate(iso) {
   const [y, m, d] = iso.split('-');
   return `${d}/${m}/${y.slice(2)}`;
-}
-// "23:30" → "23.30"
-function timeToDot(t) {
-  return (t || '').replace(':', '.');
 }
 function toIDDecimal(n) {
   return n.toFixed(4).replace('.', ',');
@@ -64,16 +62,11 @@ function FormInner() {
   const isRekap = target === 'rekap';
 
   const [form, setForm] = useState({ tanggal: todayStr() });
-  const [ph, setPh] = useState({
-    A: { dari: '', sampai: '', nilai: '' },
-    B: { dari: '', sampai: '', nilai: '' },
-    C: { dari: '', sampai: '', nilai: '' },
-    D: { dari: '', sampai: '', nilai: '' },
-    E: { dari: '', sampai: '', nilai: '' }
-  });
+  const [ph, setPh] = useState(emptyPh());
   const [msg, setMsg] = useState({ type: '', text: '' });
   const [loading, setLoading] = useState(false);
   const [anomaliModal, confirmAnomali] = useAnomaliConfirm();
+  const cooldown = useCooldown();
 
   function set(field, value) {
     setForm(f => ({ ...f, [field]: value }));
@@ -129,6 +122,8 @@ function FormInner() {
     e.preventDefault();
     setMsg({ type: '', text: '' });
 
+    if (cooldown.remaining > 0) return; // tombol sudah disabled, jaga-jaga submit via Enter
+
     const deteksi = isRekap ? await deteksiAnomaliRekap() : deteksiAnomaliShift();
 
     if (deteksi.anomali) {
@@ -144,13 +139,7 @@ function FormInner() {
         tanggalIso: form.tanggal
       };
       if (!isRekap) {
-        const phOut = {};
-        for (const line of ['A', 'B', 'C', 'D', 'E']) {
-          const p = ph[line];
-          const jam = (p.dari && p.sampai) ? `${timeToDot(p.dari)} - ${timeToDot(p.sampai)}` : '';
-          phOut[line] = { jam, nilai: p.nilai || '' };
-        }
-        payload.phSantan = phOut;
+        payload.phSantan = phToPayload(ph);
       }
 
       const res = await fetch('/api/approvals', {
@@ -163,8 +152,10 @@ function FormInner() {
 
       if (!res.ok) {
         setMsg({ type: 'error', text: data.error });
+        if (data.cooldownRemainingSeconds) cooldown.start(data.cooldownRemainingSeconds);
         return;
       }
+      if (data.cooldownSeconds) cooldown.start(data.cooldownSeconds);
       let anomaliText = '📨 Data anomali terkirim ke Viewer untuk persetujuan. Excel belum diupdate sampai di-ACC.';
       anomaliText += data.waSent ? ' Notifikasi WA ke Viewer terkirim 📱' : ' (Notifikasi WA gagal terkirim, tapi tetap bisa dilihat Viewer di app)';
       setMsg({ type: 'success', text: anomaliText });
@@ -181,14 +172,7 @@ function FormInner() {
     };
 
     if (!isRekap) {
-      // Susun PH Santan: jam = "23.30 - 04.30"
-      const phOut = {};
-      for (const line of ['A', 'B', 'C', 'D', 'E']) {
-        const p = ph[line];
-        const jam = (p.dari && p.sampai) ? `${timeToDot(p.dari)} - ${timeToDot(p.sampai)}` : '';
-        phOut[line] = { jam, nilai: p.nilai || '' };
-      }
-      payload.phSantan = phOut;
+      payload.phSantan = phToPayload(ph);
     }
 
     const url = isRekap ? '/api/rekap' : '/api/shift';
@@ -204,8 +188,10 @@ function FormInner() {
 
     if (!res.ok) {
       setMsg({ type: 'error', text: data.error });
+      if (data.cooldownRemainingSeconds) cooldown.start(data.cooldownRemainingSeconds);
       return;
     }
+    if (data.cooldownSeconds) cooldown.start(data.cooldownSeconds);
     let text = `✅ ${data.cellsWritten} cell tersimpan ke Excel.`;
     text += data.waSent ? ' Laporan WA sedang dikirim 📨' : ` ⚠️ ${data.warn || 'WA tidak terkirim'}`;
     setMsg({ type: data.waSent ? 'success' : 'error', text });
@@ -230,112 +216,13 @@ function FormInner() {
           <input type="date" value={form.tanggal} onChange={e => set('tanggal', e.target.value)} required />
         </div>
 
-        {!isRekap && (
-          <>
-            <div className="card">
-              <h2>Produksi</h2>
-              <label>Buka Kelapa (Kg)</label>
-              <KgInput value={form.bkKlp} onChange={v => set('bkKlp', v)} placeholder="contoh: 325676.3" />
-              <label>Pakai Jambul (Kg)</label>
-              <KgInput value={form.pakaiJmbl} onChange={v => set('pakaiJmbl', v)} placeholder="contoh: 266455" />
-              <label>Rijek (desimal, contoh 0.0156 = 1,56%)</label>
-              <input type="text" inputMode="decimal" value={form.rijek || ''} onChange={e => set('rijek', e.target.value)} placeholder="contoh: 0.0156" />
-              <label>Sisa Kelapa</label>
-              <input type="text" value={form.sisaKlp || ''} onChange={e => set('sisaKlp', e.target.value)} placeholder="contoh: 0 Tank" />
-            </div>
-
-            <div className="card">
-              <h2>Kehadiran Sheller</h2>
-              <label>Format: B136,H0,L0=136dr154=88,31%</label>
-              <input type="text" value={form.khdrnSh || ''} onChange={e => set('khdrnSh', e.target.value)} placeholder="B136,H0,L0=136dr154=88,31%" />
-              <label>Rata-rata Sheller</label>
-              <input type="text" value={form.rt2Sh || ''} onChange={e => set('rt2Sh', e.target.value)} placeholder="B2395,H0,L0= Rata 2395" />
-            </div>
-
-            <div className="card">
-              <h2>Kehadiran Parer</h2>
-              <label>Format: B358,H13,L0=371dr408=90,93%</label>
-              <input type="text" value={form.khdrnPr || ''} onChange={e => set('khdrnPr', e.target.value)} placeholder="B358,H13,L0=371dr408=90,93%" />
-              <label>Rata-rata Parer</label>
-              <input type="text" value={form.rt2Pr || ''} onChange={e => set('rt2Pr', e.target.value)} placeholder="B845,H0,L0=Rata 845" />
-            </div>
-
-            <div className="card">
-              <h2>White Meat & Air</h2>
-              <label>Kg White Meat</label>
-              <KgInput value={form.kgWm} onChange={v => set('kgWm', v)} placeholder="contoh: 114746.5" />
-              <label>Air MP1 (Kg)</label>
-              <KgInput value={form.airMp1} onChange={v => set('airMp1', v)} placeholder="contoh: 84676.06" />
-              <label>Air MP2 (Kg)</label>
-              <KgInput value={form.airMp2} onChange={v => set('airMp2', v)} placeholder="contoh: 1218.6" />
-              <p className="sub" style={{ marginTop: 8 }}>EF WM, EF FCW, dan Total dihitung otomatis oleh formula Excel</p>
-            </div>
-
-            <div className="card">
-              <h2>PH Santan</h2>
-              <p className="sub">Pilih jam mulai & selesai (bisa diketik), lalu isi nilai PH dipisah garis miring</p>
-              {['A', 'B', 'C', 'D', 'E'].map(line => (
-                <div key={line} style={{ marginBottom: 16, paddingBottom: 12, borderBottom: '1px solid var(--border)' }}>
-                  <label>Line {line}</label>
-                  <div className="grid2">
-                    <div>
-                      <span style={{ fontSize: 12, color: 'var(--muted)' }}>Dari jam</span>
-                      <input type="time" value={ph[line].dari} onChange={e => setPhField(line, 'dari', e.target.value)} />
-                    </div>
-                    <div>
-                      <span style={{ fontSize: 12, color: 'var(--muted)' }}>Sampai jam</span>
-                      <input type="time" value={ph[line].sampai} onChange={e => setPhField(line, 'sampai', e.target.value)} />
-                    </div>
-                  </div>
-                  <span style={{ fontSize: 12, color: 'var(--muted)' }}>Nilai PH</span>
-                  <input type="text" value={ph[line].nilai} onChange={e => setPhField(line, 'nilai', e.target.value)} placeholder="6,05/6,08/6,06" />
-                </div>
-              ))}
-            </div>
-          </>
-        )}
-
-        {isRekap && (
-          <>
-            <div className="card">
-              <h2>Stok</h2>
-              <label>Stok di Petak (Kg)</label>
-              <KgInput value={form.stokPetak} onChange={v => set('stokPetak', v)} />
-              <label>Stok di Bufer (Kg)</label>
-              <KgInput value={form.stokBufer} onChange={v => set('stokBufer', v)} />
-              <p className="sub" style={{ marginTop: 8 }}>Total Stok dihitung otomatis oleh Excel</p>
-            </div>
-
-            <div className="card">
-              <h2>Akumulasi</h2>
-              <label>Akum BK KLP (Kg)</label>
-              <KgInput value={form.akumBkKlp} onChange={v => set('akumBkKlp', v)} />
-              <label>Akum Air MP1+MP2 (Kg)</label>
-              <KgInput value={form.akumAir} onChange={v => set('akumAir', v)} />
-              <label>EF FCW MP1+MP2</label>
-              <input type="text" inputMode="decimal" value={form.efFcwMp12 || ''} onChange={e => set('efFcwMp12', e.target.value)} />
-            </div>
-
-            <div className="card">
-              <h2>DC & Santan</h2>
-              <label>DC (Kg)</label>
-              <KgInput value={form.dc} onChange={v => set('dc', v)} />
-              <label>Akum DC (Kg)</label>
-              <KgInput value={form.akumDc} onChange={v => set('akumDc', v)} />
-              <label>Santan L.A (Kg)</label>
-              <KgInput value={form.santanLA} onChange={v => set('santanLA', v)} />
-              <label>TTL Santan (Kg)</label>
-              <KgInput value={form.ttlSantan} onChange={v => set('ttlSantan', v)} />
-              <label>Akum Santan (Kg)</label>
-              <KgInput value={form.akumSantan} onChange={v => set('akumSantan', v)} />
-              <label>Sisa Kelapa</label>
-              <input type="text" value={form.sisaKlp || ''} onChange={e => set('sisaKlp', e.target.value)} placeholder="contoh: 0" />
-            </div>
-          </>
-        )}
+        <ProductionFormFields isRekap={isRekap} form={form} set={set} ph={ph} setPhField={setPhField} />
 
         {msg.text && <p className={msg.type}>{msg.text}</p>}
-        <button disabled={loading}>{loading ? 'Menyimpan & mengirim...' : '💾 Simpan & Kirim WA'}</button>
+        <CooldownNotice seconds={cooldown.remaining} />
+        <button disabled={loading || cooldown.remaining > 0}>
+          {loading ? 'Menyimpan & mengirim...' : '💾 Simpan & Kirim WA'}
+        </button>
         <button type="button" className="secondary" onClick={() => router.push('/input')}>← Kembali</button>
       </form>
     </div>

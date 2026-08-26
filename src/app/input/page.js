@@ -2,6 +2,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Nav from '@/lib/Nav';
+import CooldownNotice from '@/lib/CooldownNotice';
+import useCooldown from '@/lib/useCooldown';
 
 const DISMISS_KEY = 'bk_dismissed_approvals';
 
@@ -102,6 +104,7 @@ export default function InputPage() {
 
   const [msgRekapLibur, setMsgRekapLibur] = useState({ type: '', text: '' });
   const [loadingRekapLibur, setLoadingRekapLibur] = useState(false);
+  const cooldown = useCooldown();
 
   const WAKTU_EMOJI = { pagi: '🌅', siang: '☀️', malam: '🌙' };
 
@@ -110,6 +113,7 @@ export default function InputPage() {
   }
 
   async function kirimLibur() {
+    if (cooldown.remaining > 0) return;
     if (!confirm(`Kirim notifikasi LIBUR PRODUKSI untuk Shift ${shift.slice(-1)} (${waktu.toUpperCase()})?\n\nPesan akan langsung terkirim ke WhatsApp Bos.`)) return;
     setLoading(true);
     setMsg({ type: '', text: '' });
@@ -120,11 +124,17 @@ export default function InputPage() {
     });
     const d = await res.json();
     setLoading(false);
-    if (!res.ok) { setMsg({ type: 'error', text: d.error }); return; }
+    if (!res.ok) {
+      setMsg({ type: 'error', text: d.error });
+      if (d.cooldownRemainingSeconds) cooldown.start(d.cooldownRemainingSeconds);
+      return;
+    }
+    if (d.cooldownSeconds) cooldown.start(d.cooldownSeconds);
     setMsg({ type: 'success', text: '✅ Notifikasi LIBUR PRODUKSI terkirim ke Bos' });
   }
 
   async function kirimLiburRekap() {
+    if (cooldown.remaining > 0) return;
     if (!confirm('Kirim notifikasi LIBUR PRODUKSI untuk Rekap Harian (ketiga shift libur)?\n\nPesan akan langsung terkirim ke WhatsApp Bos.')) return;
     setLoadingRekapLibur(true);
     setMsgRekapLibur({ type: '', text: '' });
@@ -135,7 +145,12 @@ export default function InputPage() {
     });
     const d = await res.json();
     setLoadingRekapLibur(false);
-    if (!res.ok) { setMsgRekapLibur({ type: 'error', text: d.error }); return; }
+    if (!res.ok) {
+      setMsgRekapLibur({ type: 'error', text: d.error });
+      if (d.cooldownRemainingSeconds) cooldown.start(d.cooldownRemainingSeconds);
+      return;
+    }
+    if (d.cooldownSeconds) cooldown.start(d.cooldownSeconds);
     setMsgRekapLibur({ type: 'success', text: '✅ Notifikasi LIBUR PRODUKSI (Rekap) terkirim ke Bos' });
   }
 
@@ -190,10 +205,11 @@ export default function InputPage() {
           <h2>3️⃣ Lanjut</h2>
           <p className="sub">Shift {shift.slice(-1)} — {WAKTU_EMOJI[waktu]} {waktu.toUpperCase()}</p>
           <button onClick={goToForm}>📝 Isi Data Produksi</button>
-          <button className="danger" disabled={loading} onClick={kirimLibur}>
+          <button className="danger" disabled={loading || cooldown.remaining > 0} onClick={kirimLibur}>
             {loading ? 'Mengirim...' : '⛔ LIBUR PRODUKSI (kirim notif)'}
           </button>
           {msg.text && <p className={msg.type}>{msg.text}</p>}
+          <CooldownNotice seconds={cooldown.remaining} />
         </div>
       )}
 
@@ -204,10 +220,11 @@ export default function InputPage() {
           <button className="secondary" onClick={() => router.push('/input/form?target=rekap')}>
             📝 Isi Rekap Harian
           </button>
-          <button className="danger" disabled={loadingRekapLibur} onClick={kirimLiburRekap} style={{ marginTop: 8 }}>
+          <button className="danger" disabled={loadingRekapLibur || cooldown.remaining > 0} onClick={kirimLiburRekap} style={{ marginTop: 8 }}>
             {loadingRekapLibur ? 'Mengirim...' : '⛔ LIBUR (Ketiga Shift) — kirim notif'}
           </button>
           {msgRekapLibur.text && <p className={msgRekapLibur.type}>{msgRekapLibur.text}</p>}
+          <CooldownNotice seconds={cooldown.remaining} />
         </div>
       )}
     </div>

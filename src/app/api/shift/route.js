@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { SHIFT_LABELS } from '@/lib/excel-map';
 import { executeShiftSubmit } from '@/lib/submitFlow';
+import { checkCooldown, markSubmitted } from '@/lib/cooldown';
+import { getCooldownMinutes } from '@/lib/settings';
 
 export async function POST(req) {
   const auth = await requireAuth();
@@ -29,9 +31,16 @@ export async function POST(req) {
     return NextResponse.json({ error: 'Tanggal wajib diisi' }, { status: 400 });
   }
 
+  const cd = await checkCooldown(auth.session);
+  if (!cd.ok) {
+    return NextResponse.json({ error: `Tunggu ${cd.remainingSeconds} detik lagi sebelum submit berikutnya`, cooldownRemainingSeconds: cd.remainingSeconds }, { status: 429 });
+  }
+
   try {
     const result = await executeShiftSubmit({ target, waktu, form, actorSession: auth.session });
-    return NextResponse.json({ ok: true, ...result });
+    await markSubmitted(auth.session.id);
+    const cooldownMinutes = await getCooldownMinutes();
+    return NextResponse.json({ ok: true, ...result, cooldownSeconds: cooldownMinutes * 60 });
   } catch (e) {
     return NextResponse.json({ error: e.message }, { status: 500 });
   }

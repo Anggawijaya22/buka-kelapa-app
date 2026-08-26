@@ -3,6 +3,8 @@ import { requireAuth } from '@/lib/auth';
 import { db, logAudit } from '@/lib/db';
 import { SHIFT_LABELS } from '@/lib/excel-map';
 import { triggerN8n } from '@/lib/n8n';
+import { checkCooldown, markSubmitted } from '@/lib/cooldown';
+import { getCooldownMinutes } from '@/lib/settings';
 
 const APPROVER_ROLES = ['viewer', 'superadmin'];
 
@@ -75,6 +77,11 @@ export async function POST(req) {
     }
   }
 
+  const cd = await checkCooldown(auth.session);
+  if (!cd.ok) {
+    return NextResponse.json({ error: `Tunggu ${cd.remainingSeconds} detik lagi sebelum submit berikutnya`, cooldownRemainingSeconds: cd.remainingSeconds }, { status: 429 });
+  }
+
   const { data, error } = await db.from('pending_approvals').insert({
     target,
     waktu: waktu || null,
@@ -105,5 +112,7 @@ export async function POST(req) {
     approvalUrl: `${process.env.APP_URL || ''}/approval`
   });
 
-  return NextResponse.json({ ok: true, id: data.id, waSent: n8n.ok, warn: n8n.warn || null });
+  await markSubmitted(auth.session.id);
+  const cooldownMinutes = await getCooldownMinutes();
+  return NextResponse.json({ ok: true, id: data.id, waSent: n8n.ok, warn: n8n.warn || null, cooldownSeconds: cooldownMinutes * 60 });
 }
