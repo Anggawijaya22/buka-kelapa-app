@@ -15,7 +15,7 @@ const FIELD_LABELS_SHIFT = {
 };
 const FIELD_LABELS_REKAP = {
   stokPetak: 'Stok Petak (Kg)', stokBufer: 'Stok Bufer (Kg)', akumBkKlp: 'Akum BK KLP (Kg)', akumAir: 'Akum Air MP1+MP2 (Kg)',
-  efFcwMp12: 'EF FCW MP1+MP2', dc: 'DC (Kg)', akumDc: 'Akum DC (Kg)', santanLA: 'Santan L.A (Kg)',
+  dc: 'DC (Kg)', akumDc: 'Akum DC (Kg)', santanLA: 'Santan L.A (Kg)',
   ttlSantan: 'TTL Santan (Kg)', akumSantan: 'Akum Santan (Kg)', sisaKlp: 'Sisa Kelapa'
 };
 
@@ -67,7 +67,7 @@ function EditForm({ item, cooldown, onSaved, onCancel }) {
     const payload = { ...form };
     if (!isRekap) payload.phSantan = phToPayload(ph);
 
-    const res = await fetch('/api/history', {
+    const res = await fetch('/api/monitoring', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: item.id, form: payload })
@@ -156,7 +156,7 @@ function Section({ item, cooldown, onChanged }) {
   );
 }
 
-export default function HistoryPage() {
+export default function MonitoringPage() {
   const [role, setRole] = useState('');
   const [tanggal, setTanggal] = useState(todayStr());
   const [items, setItems] = useState([]);
@@ -175,7 +175,7 @@ export default function HistoryPage() {
 
   async function load() {
     setLoading(true);
-    const res = await fetch(`/api/history?tanggal=${tanggal}`);
+    const res = await fetch(`/api/monitoring?tanggal=${tanggal}`);
     if (res.status === 403) { setForbidden(true); setLoading(false); return; }
     const d = await res.json();
     setItems(d.items || []);
@@ -194,7 +194,7 @@ export default function HistoryPage() {
   return (
     <div className="container">
       <Nav />
-      <h1>History</h1>
+      <h1>Monitoring</h1>
       <p className="sub">
         {role === 'admin'
           ? 'Riwayat data shift Anda — bisa dicek dan diedit'

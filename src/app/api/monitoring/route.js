@@ -8,14 +8,14 @@ import { getCooldownMinutes } from '@/lib/settings';
 
 const ALL_TARGETS = ['shiftA', 'shiftB', 'shiftC', 'rekap'];
 
-// GET /api/history?tanggal=YYYY-MM-DD  (default: hari ini)
+// GET /api/monitoring?tanggal=YYYY-MM-DD  (default: hari ini)
 // Admin Shift  -> hanya data shift yang ditugaskan ke dirinya
 // Admin Atas / Developer -> data shiftA, shiftB, shiftC, dan rekap
 export async function GET(req) {
   const auth = await requireAuth();
   if (auth.error) return NextResponse.json({ error: auth.error }, { status: auth.status });
   if (!['admin', 'admin_atas', 'superadmin'].includes(auth.session.role)) {
-    return NextResponse.json({ error: 'Anda tidak punya akses ke History' }, { status: 403 });
+    return NextResponse.json({ error: 'Anda tidak punya akses ke Monitoring' }, { status: 403 });
   }
 
   const { searchParams } = new URL(req.url);
@@ -50,12 +50,12 @@ export async function GET(req) {
   return NextResponse.json({ tanggal, items });
 }
 
-// PUT /api/history { id, form } -> edit submission yang sudah ada (timpa payload yang sama)
+// PUT /api/monitoring { id, form } -> edit submission yang sudah ada (timpa payload yang sama)
 export async function PUT(req) {
   const auth = await requireAuth();
   if (auth.error) return NextResponse.json({ error: auth.error }, { status: auth.status });
   if (!['admin', 'admin_atas', 'superadmin'].includes(auth.session.role)) {
-    return NextResponse.json({ error: 'Anda tidak punya akses untuk edit History' }, { status: 403 });
+    return NextResponse.json({ error: 'Anda tidak punya akses untuk edit Monitoring' }, { status: 403 });
   }
 
   const { id, form } = await req.json();

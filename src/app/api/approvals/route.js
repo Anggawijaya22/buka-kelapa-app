@@ -50,13 +50,16 @@ export async function POST(req) {
   const auth = await requireAuth();
   if (auth.error) return NextResponse.json({ error: auth.error }, { status: auth.status });
 
-  const { target, waktu, form, efWmPreview, reason } = await req.json();
+  const { target, waktu, form, efWmPreview, reason, catatan } = await req.json();
   const isRekap = target === 'rekap';
   if (!isRekap && !SHIFT_LABELS[target]) {
     return NextResponse.json({ error: 'Target tidak valid' }, { status: 400 });
   }
   if (!form?.tanggal) {
     return NextResponse.json({ error: 'Tanggal wajib diisi' }, { status: 400 });
+  }
+  if (!catatan || !catatan.trim()) {
+    return NextResponse.json({ error: 'Catatan wajib diisi kalau tetap mengirim data anomali' }, { status: 400 });
   }
 
   if (isRekap) {
@@ -89,6 +92,7 @@ export async function POST(req) {
     form_payload: form,
     ef_wm_preview: efWmPreview ?? null,
     anomali_reason: reason || null,
+    catatan: catatan.trim(),
     submitted_by_id: auth.session.id,
     submitted_by_username: auth.session.username,
     status: 'pending'
@@ -96,7 +100,7 @@ export async function POST(req) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  await logAudit(auth.session, 'AJUKAN_ANOMALI', { target, waktu, tanggal: form.tanggal, reason });
+  await logAudit(auth.session, 'AJUKAN_ANOMALI', { target, waktu, tanggal: form.tanggal, reason, catatan: catatan.trim() });
 
   // Kirim notifikasi WA ke Viewer via webhook n8n khusus anomali — tetap jalan walau viewer
   // sedang tidak buka aplikasi / logout. Tidak menggagalkan alur approval kalau webhook gagal.
@@ -109,6 +113,7 @@ export async function POST(req) {
     submittedBy: auth.session.username,
     efWm: efWmPreview ?? null,
     reason: reason || null,
+    catatan: catatan.trim(),
     approvalUrl: `${process.env.APP_URL || ''}/approval`
   });
 

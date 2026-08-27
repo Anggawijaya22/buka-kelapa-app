@@ -56,29 +56,42 @@ export default function Nav() {
   const isViewer = role === 'viewer';
   const isAdminShift = role === 'admin';
   const isAdminAtas = role === 'admin_atas';
-  // superadmin (developer): semua menu
-  // admin (admin shift): Input Data (shift) + History (shift sendiri) + Password
-  // admin_atas (admin atas): Input Data (rekap harian) + History (semua shift + rekap) + Password
+  // superadmin (developer): semua menu + Log
+  // admin (admin shift): Input Data (shift) + Monitoring (shift sendiri) + Password
+  // admin_atas (admin atas): Input Data (rekap harian) + Monitoring (semua shift + rekap) + Password
   // viewer: hanya Approval + Password
 
   const links = [
-    { href: '/dashboard',   label: 'Dashboard',    show: isSuper },
-    { href: '/input',       label: 'Input Data',   show: isAdminShift || isAdminAtas || isSuper },
-    { href: '/history',     label: 'History',      show: isAdminShift || isAdminAtas || isSuper },
-    { href: '/approval',    label: '⚠️ Approval',  show: isViewer || isSuper },
-    { href: '/password',    label: 'Password',     show: true },
-    { href: '/users',       label: 'Users',        show: isSuper },
-    { href: '/pengaturan',  label: '⚙️ Pengaturan', show: isSuper },
+    { href: '/dashboard',    label: 'Dashboard',      show: isSuper },
+    { href: '/input',        label: 'Input Data',     show: isAdminShift || isAdminAtas || isSuper },
+    { href: '/monitoring',   label: 'Monitoring',     show: isAdminShift || isAdminAtas || isSuper },
+    { href: '/approval',     label: '⚠️ Approval',    show: isViewer || isSuper },
+    { href: '/password',     label: 'Password',       show: true },
+    { href: '/users',        label: 'Users',          show: isSuper },
+    { href: '/pengaturan',   label: '⚙️ Pengaturan',  show: isSuper },
+    { href: '/log',          label: '📋 Log',         show: isSuper },
   ];
 
   return (
     <>
-      <div className="nav">
+      <button
+        type="button"
+        onClick={logout}
+        style={{
+          position: 'fixed', top: 12, right: 12, zIndex: 200, width: 'auto',
+          padding: '8px 16px', margin: 0, borderRadius: 20, border: 'none',
+          background: 'var(--danger)', color: '#fff', fontSize: 13, fontWeight: 600,
+          boxShadow: '0 2px 6px rgba(0,0,0,0.18)'
+        }}
+      >
+        🚪 Keluar
+      </button>
+
+      <div className="nav" style={{ paddingRight: 90 }}>
         {links.filter(l => l.show).map(l => (
           <a key={l.href} href={l.href} className={pathname.startsWith(l.href) ? 'active' : ''}>{l.label}</a>
         ))}
         <a href="#" onClick={e => { e.preventDefault(); setDownloadState('confirm'); }}>⬇️ Download Excel</a>
-        <a href="#" onClick={e => { e.preventDefault(); logout(); }} style={{ marginLeft: 'auto', color: '#dc2626' }}>Keluar</a>
       </div>
 
       {downloadState === 'confirm' && (

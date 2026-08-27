@@ -63,12 +63,17 @@ Admin input data langsung dari HP → tulis ke Excel OneDrive → n8n baca Excel
 - Admin Atas tidak punya kolom `shift` (selalu null) dan tidak bisa input data shift (diblokir di `api/shift`, `api/libur` non-rekap, `api/approvals` non-rekap).
 
 ### Menu per Role
-- **Dashboard, Users, Pengaturan:** hanya Developer (superadmin)
+- **Dashboard, Users, Pengaturan, Log:** hanya Developer (superadmin)
 - **Input Data:** Admin Shift (shift terbatas, tanpa Rekap Harian) + Admin Atas (hanya Rekap Harian) + Developer (semua)
-- **History:** Admin Shift (hanya data shift miliknya sendiri, bisa edit) + Admin Atas (data shiftA/B/C + rekap, bisa edit semua) + Developer (semua, bisa edit semua)
+- **Monitoring:** Admin Shift (hanya data shift miliknya sendiri, bisa edit) + Admin Atas (data shiftA/B/C + rekap, bisa edit semua) + Developer (semua, bisa edit semua)
 - **Approval:** viewer + Developer
 - **Password:** semua role
 - **⬇️ Download Excel:** semua role (lihat "Download Excel" di bawah)
+
+> ⚠️ Menu ini dulu bernama **"History"** — cuma ganti nama tampilan jadi **"Monitoring"**
+> (route `/monitoring`, API `src/app/api/monitoring/route.js`), fungsinya identik. Jangan bingung dengan
+> menu **"Log"** yang baru (khusus Developer) — Log isinya jejak aktivitas semua akun (login, ganti
+> password, kelola user, dll), bukan monitor/edit data submission. Lihat detail masing-masing di bawah.
 
 ### Download Excel
 - Link "⬇️ Download Excel" di Nav (`src/lib/Nav.js`, tampil untuk semua role) → fetch JS ke
@@ -85,9 +90,30 @@ Admin input data langsung dari HP → tulis ke Excel OneDrive → n8n baca Excel
   fitur tulis Excel lainnya (`writeCell`/`readRange`).
 - Tidak ada pembatasan role selain harus login (`requireAuth()` tanpa parameter role).
 
-> ⚠️ Menu **History** yang SEKARANG berbeda total dari History versi lama (yang dulu isinya audit log,
-> khusus Developer, sudah dihapus total termasuk `src/app/api/logs`). History versi baru ini adalah
-> monitor+edit data submission per tanggal (lihat bagian "Menu History (Monitor & Edit)" di bawah).
+### Anomali wajib ada Catatan
+- Saat form Input Data mendeteksi EF WM anomali dan user pilih **"Tetap Kirim"**, muncul kolom
+  **Catatan** (textarea) yang WAJIB diisi (divalidasi client di `useAnomaliConfirm()` — tombol "Tetap
+  Kirim" disabled selagi kosong — DAN server-side di `api/approvals` POST, return 400 kalau kosong/spasi
+  saja). Disimpan di kolom `pending_approvals.catatan`.
+- Catatan ini beda dari `anomali_reason` (teks teknis otomatis, misal "EF WM diperkirakan: 0,0100") —
+  catatan adalah penjelasan MANUAL dari admin kenapa dia tetap kirim walau anomali.
+- Viewer & Developer bisa lihat catatan ini di halaman `/approval` (ditampilkan di setiap card, di bawah
+  `anomali_reason`).
+
+### Log Aktivitas (khusus Developer)
+- Route `/log`, API `src/app/api/logs/route.js` (GET, `requireAuth('superadmin')`).
+- Baca dari tabel `audit_logs` (sudah ada sejak awal, ditulis oleh `logAudit()` di `src/lib/db.js` —
+  dipanggil dari hampir semua API: login/logout, ganti password, kelola user, submit/edit data, kirim
+  libur, ajukan/ACC/reject anomali, ubah pengaturan).
+- Tampilan SENGAJA disederhanakan (bukan dump JSON mentah kayak History versi lama) — cuma kolom Waktu,
+  User, Aktivitas (label manusiawi, mis. "📝 Input Data Shift A"), dan Info ringkas (tanggal/waktu/target/
+  username terkait, bukan detail form lengkap — detail lengkap input data ada di menu Monitoring).
+  Mapping label ada di `formatLog()` di `src/app/log/page.js`, cocokkan action code baru kalau nambah
+  `logAudit()` call baru di API lain.
+
+### Tombol Keluar
+- Dipindah keluar dari deretan menu Nav — sekarang `position: fixed` di pojok kanan atas layar (semua
+  halaman), bentuknya beda (pil merah solid) supaya tidak tertukar dengan menu lain. Lihat `src/lib/Nav.js`.
 
 ### Form Input Data (validasi, draft, popup hasil)
 - **Semua field wajib diisi** (termasuk 15 field PH Santan) sebelum submit bisa jalan — divalidasi oleh
@@ -100,17 +126,17 @@ Admin input data langsung dari HP → tulis ke Excel OneDrive → n8n baca Excel
   yang diketik user (termasuk komanya); setelah blur tetap diformat ribuan-titik/desimal-koma seperti biasa.
   Kontrak `onChange` tidak berubah — tetap raw dot-decimal ("79911.00") untuk kompatibilitas Excel.
 - **Popup hasil submit**: `src/lib/useResultModal.js`, dipakai di submit Input Data, Simpan Perubahan
-  History, dan tombol LIBUR PRODUKSI. Sukses → "✅ DATA BERHASIL DIKIRIM" + tombol OK (kembali ke
+  Monitoring, dan tombol LIBUR PRODUKSI. Sukses → "✅ DATA BERHASIL DIKIRIM" + tombol OK (kembali ke
   menu/tutup, form/draft otomatis bersih). Gagal → "❌ DATA GAGAL DIKIRIM" + tombol "Kirim Ulang"
   (retry pakai payload yang sama) atau "Kembali" (tutup, data isian tetap ada, tidak hilang).
-- **Draft otomatis + tombol Refresh**: HANYA di `/input/form` (input baru), TIDAK di History (edit).
+- **Draft otomatis + tombol Refresh**: HANYA di `/input/form` (input baru), TIDAK di Monitoring (edit).
   Form auto-save ke `localStorage` (key `bk_draft_<target>_<waktu>`) tiap kali user mengetik. Kalau
   HP/PC mati di tengah proses, buka lagi form yang sama → tombol "🔄 Refresh" muncul (kalau ada draft
   tersimpan) → klik untuk memuat ulang isian sebelumnya (ada konfirmasi supaya tidak menimpa isian baru
   yang sedang diketik tanpa sengaja). Draft dihapus otomatis setelah submit berhasil.
 
-### Menu History (Monitor & Edit)
-- Route: `/history`, API: `src/app/api/history/route.js` (GET = lihat, PUT = edit).
+### Menu Monitoring (dulu bernama History)
+- Route: `/monitoring`, API: `src/app/api/monitoring/route.js` (GET = lihat, PUT = edit).
 - Ada date picker (default hari ini). Data diambil dari tabel `submissions` (BUKAN dari Excel — Excel
   cuma snapshot "live" tanpa histori per tanggal, lihat catatan Excel di bawah).
 - **Admin Shift:** hanya lihat & edit data shift yang ditugaskan ke dirinya (`target === session.shift`),
@@ -126,10 +152,16 @@ Admin input data langsung dari HP → tulis ke Excel OneDrive → n8n baca Excel
   tidak menimpa laporan hari ini yang sedang dipakai n8n.
 - Edit tetap trigger WA (sama seperti submit awal), tapi kena cooldown submit (lihat di bawah).
 
+### Rekap Harian — EF FCW MP1+MP2 dihapus dari form
+- Field "EF FCW MP1+MP2" di blok Akumulasi (form Input Data Rekap & edit Monitoring) sudah DIHAPUS dari
+  UI, dari `REKAP_FIELD_KEYS` (validasi), dan dari `REKAP_ROWS` di `src/lib/excel-map.js` (baris 55) —
+  jadi app SUDAH TIDAK menulis ke cell itu sama sekali. Alasannya cell itu formula Excel (dihitung
+  otomatis), bukan input manual; sebelumnya app malah menimpa formula itu tiap submit.
+
 ### Cooldown Submit (anti-spam WA)
 - Berlaku untuk **Admin Shift & Admin Atas**, di SEMUA aksi yang trigger WA: submit awal (`api/shift`,
-  `api/rekap`), submit anomali (`api/approvals` POST), kirim notif libur (`api/libur`), dan edit History
-  (`api/history` PUT). **Developer (superadmin) tidak kena cooldown.**
+  `api/rekap`), submit anomali (`api/approvals` POST), kirim notif libur (`api/libur`), dan edit
+  Monitoring (`api/monitoring` PUT). **Developer (superadmin) tidak kena cooldown.**
 - Per-user (bukan per-record): begitu 1 aksi submit berhasil, user itu harus tunggu N menit sebelum bisa
   submit aksi APA PUN lagi. Dilacak lewat kolom `users.last_submit_at`, dicek/di-update oleh
   `src/lib/cooldown.js` (`checkCooldown`, `markSubmitted`).
@@ -137,7 +169,7 @@ Admin input data langsung dari HP → tulis ke Excel OneDrive → n8n baca Excel
   diubah Developer lewat menu **Pengaturan** (`/pengaturan`, API `src/app/api/settings/route.js`) tanpa
   perlu ubah kode.
 - UI: hitung mundur ditampilkan via hook `src/lib/useCooldown.js` + komponen `src/lib/CooldownNotice.js`,
-  dipakai di halaman Input Data dan History. Tombol submit/simpan otomatis ke-disable selama cooldown.
+  dipakai di halaman Input Data dan Monitoring. Tombol submit/simpan otomatis ke-disable selama cooldown.
 
 ### Notifikasi WhatsApp
 - Laporan WA dikirim saat admin **submit** (webhook trigger ke n8n) — termasuk saat edit lewat History
@@ -186,7 +218,7 @@ action, detail jsonb, created_at
 > ⚠️ **Excel bukan buku besar per-tanggal.** Sheet "Laporan SMS 2 (KG)" cuma punya 1 baris/kolom
 > "live" per shift (misal Shift A selalu kolom D baris 5-34, apa pun tanggalnya) — bukan 1 baris per
 > tanggal. Jadi histori yang akurat per tanggal HANYA ada di `submissions.payload`, bukan di Excel.
-> Ini alasan menu History baca dari Supabase, dan kenapa edit tanggal lampau tidak boleh menulis ke Excel.
+> Ini alasan menu Monitoring baca dari Supabase, dan kenapa edit tanggal lampau tidak boleh menulis ke Excel.
 
 > ℹ️ **Header baris 4 ikut waktu yang dipilih.** Tiap kali submit/edit Shift A/B/C, cell header di baris 4
 > (`B4` utk Shift A, `K4` utk Shift B, `Q4` utk Shift C — kolom sama dgn label TGL/BK KLP shift itu) ikut
@@ -204,6 +236,7 @@ action, detail jsonb, created_at
 | `migration-fix-delete-user.sql` | ✅ SUDAH dijalankan (FK ON DELETE SET NULL untuk audit_logs & submissions) |
 | `add_admin_atas_role` (via MCP, tanpa file lokal) | ✅ SUDAH dijalankan (`users_role_check` diperluas untuk mengizinkan `admin_atas`) |
 | `add_history_edit_and_cooldown_support` (via MCP, tanpa file lokal) | ✅ SUDAH dijalankan (tabel `app_settings`, kolom `users.last_submit_at`, kolom `submissions.edited_at`/`edited_by_id`/`edited_by_username`) |
+| `add_catatan_to_pending_approvals` (via MCP, tanpa file lokal) | ✅ SUDAH dijalankan (kolom `pending_approvals.catatan`, catatan wajib admin saat tetap kirim data anomali) |
 
 > Untuk migrasi berikutnya: **gunakan Supabase MCP `apply_migration`** — tidak perlu copy-paste ke SQL Editor manual.
 
@@ -248,11 +281,14 @@ C:\buka-kelapa-app\
 │   │   ├── rekap/        ← khusus admin_atas/superadmin + cooldown
 │   │   ├── approvals/    ← validasi shift admin server-side + cooldown
 │   │   ├── libur/        ← validasi shift admin server-side + cooldown
-│   │   ├── history/      ← GET (lihat) & PUT (edit) submission lama, dipakai menu History
+│   │   ├── monitoring/   ← GET (lihat) & PUT (edit) submission lama, dipakai menu Monitoring
 │   │   ├── settings/     ← GET/PUT pengaturan (cooldown minutes), PUT khusus superadmin
 │   │   ├── cooldown/     ← GET sisa cooldown user yang login, dipakai init hitung mundur di client
+│   │   ├── logs/         ← GET riwayat aktivitas semua user, khusus superadmin, dipakai menu Log
+│   │   ├── excel/download/ ← GET download file Excel OneDrive apa adanya, semua role
 │   │   └── users/        ← route.js sudah fix silent fail delete
-│   ├── history/          ← menu History (monitor & edit submission per tanggal)
+│   ├── monitoring/       ← menu Monitoring (dulu "History") — monitor & edit submission per tanggal
+│   ├── log/              ← menu Log (khusus Developer) — jejak aktivitas semua akun
 │   ├── pengaturan/       ← menu Pengaturan (khusus Developer)
 │   └── (pages lain)/
 ├── src/lib/

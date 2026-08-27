@@ -4,7 +4,7 @@ import KgInput from '@/lib/KgInput';
 const PH_LINES = ['A', 'B', 'C', 'D', 'E'];
 
 export const SHIFT_FIELD_KEYS = ['bkKlp', 'pakaiJmbl', 'rijek', 'sisaKlp', 'khdrnSh', 'rt2Sh', 'khdrnPr', 'rt2Pr', 'kgWm', 'airMp1', 'airMp2'];
-export const REKAP_FIELD_KEYS = ['stokPetak', 'stokBufer', 'akumBkKlp', 'akumAir', 'efFcwMp12', 'dc', 'akumDc', 'santanLA', 'ttlSantan', 'akumSantan', 'sisaKlp'];
+export const REKAP_FIELD_KEYS = ['stokPetak', 'stokBufer', 'akumBkKlp', 'akumAir', 'dc', 'akumDc', 'santanLA', 'ttlSantan', 'akumSantan', 'sisaKlp'];
 
 export function emptyPh() {
   return Object.fromEntries(PH_LINES.map(l => [l, { dari: '', sampai: '', nilai: '' }]));
@@ -161,8 +161,7 @@ export default function ProductionFormFields({ isRekap, form, set, ph, setPhFiel
         <KgInput value={form.akumBkKlp} onChange={v => set('akumBkKlp', v)} className={errClass('akumBkKlp', errors)} />
         <label>Akum Air MP1+MP2 (Kg)<ErrMark show={errors?.akumAir} /></label>
         <KgInput value={form.akumAir} onChange={v => set('akumAir', v)} className={errClass('akumAir', errors)} />
-        <label>EF FCW MP1+MP2<ErrMark show={errors?.efFcwMp12} /></label>
-        <input type="text" inputMode="decimal" className={errClass('efFcwMp12', errors)} value={form.efFcwMp12 || ''} onChange={e => set('efFcwMp12', e.target.value)} />
+        <p className="sub" style={{ marginTop: 8 }}>EF FCW MP1+MP2 dihitung otomatis oleh formula Excel</p>
       </div>
 
       <div className="card">

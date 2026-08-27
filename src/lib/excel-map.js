@@ -93,7 +93,7 @@ const REKAP_ROWS = {
   stokBufer: 42,
   akumBkKlp: 45,
   akumAir: 54,
-  efFcwMp12: 55,
+  // efFcwMp12 (baris 55) SENGAJA tidak ditulis — itu formula Excel, bukan input manual.
   dc: 56,
   akumDc: 57,
   santanLA: 58,

@@ -24,11 +24,15 @@ function toIDDecimal(n) {
   return n.toFixed(4).replace('.', ',');
 }
 
-// Modal konfirmasi anomali — dipakai berbasis Promise (mirip window.confirm tapi custom 2 tombol)
+// Modal konfirmasi anomali — dipakai berbasis Promise (mirip window.confirm tapi custom 2 tombol).
+// Catatan WAJIB diisi kalau user pilih "Tetap Kirim" — supaya viewer/developer tahu alasan admin
+// tetap mengirim data yang anomali.
 function useAnomaliConfirm() {
   const [state, setState] = useState(null); // { message, resolve }
+  const [catatan, setCatatan] = useState('');
 
   function confirmAnomali(message) {
+    setCatatan('');
     return new Promise(resolve => {
       setState({ message, resolve });
     });
@@ -38,6 +42,8 @@ function useAnomaliConfirm() {
     setState(null);
   }
 
+  const catatanKosong = catatan.trim() === '';
+
   const modal = state ? (
     <div style={{
       position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
@@ -46,8 +52,16 @@ function useAnomaliConfirm() {
       <div className="card" style={{ maxWidth: 420, width: '100%', margin: 0 }}>
         <h2 style={{ color: 'var(--warn)' }}>⚠️ Anomali Terdeteksi</h2>
         <p style={{ whiteSpace: 'pre-line', fontSize: 14, marginBottom: 4 }}>{state.message}</p>
-        <button onClick={() => handle(true)}>✅ Tetap Kirim</button>
-        <button type="button" className="secondary" onClick={() => handle(false)}>✏️ Revisi Data</button>
+        <label>Catatan (wajib diisi kalau tetap kirim)</label>
+        <textarea
+          rows={3}
+          value={catatan}
+          onChange={e => setCatatan(e.target.value)}
+          placeholder="Contoh: sudah dicek ulang, memang segini hasilnya karena..."
+          style={{ width: '100%', padding: 12, border: '1px solid var(--border)', borderRadius: 8, fontSize: 15, fontFamily: 'inherit', resize: 'vertical' }}
+        />
+        <button disabled={catatanKosong} onClick={() => handle({ confirmed: true, catatan: catatan.trim() })}>✅ Tetap Kirim</button>
+        <button type="button" className="secondary" onClick={() => handle({ confirmed: false })}>✏️ Revisi Data</button>
       </div>
     </div>
   ) : null;
@@ -159,8 +173,8 @@ function FormInner() {
 
     if (deteksi.anomali) {
       const pesan = `${deteksi.reason}\n\nAnda bisa:\n• Tetap Kirim — data akan dikirim ke Viewer untuk di-ACC dulu sebelum masuk Excel\n• Revisi Data — kembali mengecek isian form`;
-      const tetapKirim = await confirmAnomali(pesan);
-      if (!tetapKirim) return; // Revisi — kembali ke form, tidak ada yang dikirim
+      const konfirmasi = await confirmAnomali(pesan);
+      if (!konfirmasi.confirmed) return; // Revisi — kembali ke form, tidak ada yang dikirim
 
       // Tetap Kirim → JANGAN langsung ke Excel/n8n, kirim dulu ke antrian approval Viewer/Superadmin
       setLoading(true);
@@ -176,7 +190,7 @@ function FormInner() {
       const res = await fetch('/api/approvals', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ target, waktu, form: payload, efWmPreview: deteksi.efWm, reason: deteksi.reason })
+        body: JSON.stringify({ target, waktu, form: payload, efWmPreview: deteksi.efWm, reason: deteksi.reason, catatan: konfirmasi.catatan })
       });
       const data = await res.json();
       setLoading(false);

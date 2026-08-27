@@ -166,6 +166,12 @@ export default function ApprovalPage() {
           {item.anomali_reason && (
             <p style={{ fontSize: 13, color: 'var(--warn)', whiteSpace: 'pre-line', marginBottom: 8 }}>{item.anomali_reason}</p>
           )}
+          {item.catatan && (
+            <div className="card" style={{ background: 'var(--bg)', padding: 12, marginBottom: 12 }}>
+              <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>📝 Catatan dari {item.submitted_by_username}:</p>
+              <p style={{ fontSize: 14, whiteSpace: 'pre-line' }}>{item.catatan}</p>
+            </div>
+          )}
           <button disabled={busyId === item.id} onClick={() => acc(item.id)}>
             {busyId === item.id ? 'Memproses...' : '✅ ACC — Kirim ke Excel'}
           </button>
