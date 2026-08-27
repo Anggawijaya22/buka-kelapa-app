@@ -38,10 +38,10 @@ Admin input data langsung dari HP → tulis ke Excel OneDrive → n8n baca Excel
 
 | Role DB | Label UI | Akses |
 |---------|----------|-------|
-| `superadmin` | **Developer** | Semua fitur + Users management |
-| `admin` | Admin Shift | Input Data shift (A/B/C, sesuai shift yang ditugaskan) + Password. **Tidak** ada akses Rekap Harian. |
-| `admin_atas` | Admin Atas | Input Data — hanya Rekap Harian (gabungan 3 shift) + Password. Tidak punya kolom `shift` (null). |
-| `viewer` | Viewer | Approval (lihat) + Password |
+| `superadmin` | **Developer** | Semua fitur + Pengaturan (termasuk Users management, di dalam menu Pengaturan) |
+| `admin` | Admin Shift | Input Data shift (A/B/C, sesuai shift yang ditugaskan) + Pengaturan. **Tidak** ada akses Rekap Harian. |
+| `admin_atas` | Admin Atas | Input Data — hanya Rekap Harian (gabungan 3 shift) + Pengaturan. Tidak punya kolom `shift` (null). |
+| `viewer` | Viewer | Approval (lihat) + Pengaturan |
 
 > ⚠️ **Penting:** Value di database tetap `superadmin` / `admin` / `admin_atas` / `viewer`.
 > Label "Developer"/"Admin Shift"/"Admin Atas" di UI hanya tampilan — jangan ubah value DB.
@@ -63,12 +63,28 @@ Admin input data langsung dari HP → tulis ke Excel OneDrive → n8n baca Excel
 - Admin Atas tidak punya kolom `shift` (selalu null) dan tidak bisa input data shift (diblokir di `api/shift`, `api/libur` non-rekap, `api/approvals` non-rekap).
 
 ### Menu per Role
-- **Dashboard, Users, Pengaturan, Log:** hanya Developer (superadmin)
+- **Dashboard, Log:** hanya Developer (superadmin)
 - **Input Data:** Admin Shift (shift terbatas, tanpa Rekap Harian) + Admin Atas (hanya Rekap Harian) + Developer (semua)
 - **Monitoring:** Admin Shift (hanya data shift miliknya sendiri, bisa edit) + Admin Atas (data shiftA/B/C + rekap, bisa edit semua) + Developer (semua, bisa edit semua)
 - **Approval:** viewer + Developer
-- **Password:** semua role
+- **⚙️ Pengaturan:** SEMUA role (isinya menyesuaikan role — lihat "Menu Pengaturan" di bawah)
 - **⬇️ Download Excel:** semua role (lihat "Download Excel" di bawah)
+
+### Menu Pengaturan (satu menu, isi beda per role)
+- Route `/pengaturan` sekarang tampil untuk SEMUA role (bukan cuma Developer lagi). Halaman **Password**
+  (`/password`) dan **Users** (`/users`) yang dulu berdiri sendiri SUDAH DIHAPUS TOTAL — isinya dipindah
+  jadi section di dalam Pengaturan, dan link-nya di Nav juga sudah tidak ada (sesuai permintaan: yang
+  sudah dipindah jangan tampil lagi di menu awal).
+- **Semua role** lihat 2 section teratas: **Tampilan** (toggle dark mode) dan **Ganti Password** (form
+  ganti password akun sendiri, dulu di halaman `/password`, sekarang di komponen
+  `GantiPasswordSection` dalam `src/app/pengaturan/page.js`).
+- **Khusus Developer** (`isSuper`, dicek dari `sessionStorage.getItem('bk_role')` di client — API
+  masing-masing tetap menegakkan `requireAuth('superadmin')` di server) — tambahan 2 section:
+  **Cooldown Submit** (`CooldownSection`, form yang sama seperti sebelumnya) dan **Kelola User**
+  (`KelolaUserSection` — tambah/hapus/reset password/ubah shift user, dulu di halaman `/users`, API
+  `/api/users` tidak berubah).
+- Dark mode TIDAK LAGI ada di Nav — sekarang cuma satu tempat: di dalam Pengaturan (lihat "Dark Mode"
+  di bawah, sudah diupdate).
 
 > ⚠️ Menu ini dulu bernama **"History"** — cuma ganti nama tampilan jadi **"Monitoring"**
 > (route `/monitoring`, API `src/app/api/monitoring/route.js`), fungsinya identik. Jangan bingung dengan
@@ -119,9 +135,9 @@ Admin input data langsung dari HP → tulis ke Excel OneDrive → n8n baca Excel
   halaman), bentuknya beda (pil merah solid) supaya tidak tertukar dengan menu lain. Lihat `src/lib/Nav.js`.
 
 ### Dark Mode (pilihan pribadi tiap user)
-- Toggle "🌙 Dark Mode / ☀️ Light Mode" ada di Nav (`src/lib/Nav.js`, tampil untuk SEMUA role) dan
-  duplikatnya di menu Pengaturan (khusus Developer, sekadar biar gampang ditemukan di sana juga) —
-  keduanya panggil util yang sama: `src/lib/theme.js` (`getTheme`/`setTheme`).
+- Toggle ada di section "Tampilan" di menu Pengaturan (SEMUA role, bukan cuma Developer) — TIDAK ADA
+  LAGI di Nav (sempat ada di Nav, sudah dipindah semua ke Pengaturan sesuai permintaan supaya tidak
+  dobel tampil di menu awal). Pakai util `src/lib/theme.js` (`getTheme`/`setTheme`).
 - Preferensi disimpan per-browser di `localStorage` (key `bk_theme`), BUKAN setting global di database —
   jadi tiap user (termasuk yang login di HP/browser sama-sama) pilih temanya sendiri-sendiri, tidak saling
   memengaruhi.
@@ -304,7 +320,9 @@ C:\buka-kelapa-app\
 │   │   └── users/        ← route.js sudah fix silent fail delete
 │   ├── monitoring/       ← menu Monitoring (dulu "History") — monitor & edit submission per tanggal
 │   ├── log/              ← menu Log (khusus Developer) — jejak aktivitas semua akun
-│   ├── pengaturan/       ← menu Pengaturan (khusus Developer)
+│   ├── pengaturan/       ← menu Pengaturan, SEMUA role (Tampilan+Ganti Password semua role;
+│   │                        Cooldown+Kelola User cuma render kalau isSuper). `/password` & `/users`
+│   │                        yang dulu berdiri sendiri SUDAH DIHAPUS, digabung ke sini.
 │   └── (pages lain)/
 ├── src/lib/
 │   ├── submitFlow.js             ← executeShiftSubmit/executeRekapSubmit (insert baru) +

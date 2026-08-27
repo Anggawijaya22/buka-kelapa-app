@@ -1,7 +1,6 @@
 'use client';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { getTheme, setTheme } from '@/lib/theme';
 
 const OVERLAY_STYLE = {
   position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
@@ -13,18 +12,10 @@ export default function Nav() {
   const router = useRouter();
   const [role, setRole] = useState('');
   const [downloadState, setDownloadState] = useState(null); // null | 'confirm' | 'downloading'
-  const [theme, setThemeState] = useState('light');
 
   useEffect(() => {
     setRole(sessionStorage.getItem('bk_role') || '');
-    setThemeState(getTheme());
   }, []);
-
-  function toggleTheme() {
-    const next = theme === 'dark' ? 'light' : 'dark';
-    setTheme(next);
-    setThemeState(next);
-  }
 
   async function logout() {
     await fetch('/api/auth/logout', { method: 'POST' });
@@ -65,19 +56,17 @@ export default function Nav() {
   const isViewer = role === 'viewer';
   const isAdminShift = role === 'admin';
   const isAdminAtas = role === 'admin_atas';
-  // superadmin (developer): semua menu + Log
-  // admin (admin shift): Input Data (shift) + Monitoring (shift sendiri) + Password
-  // admin_atas (admin atas): Input Data (rekap harian) + Monitoring (semua shift + rekap) + Password
-  // viewer: hanya Approval + Password
+  // superadmin (developer): semua menu + Log; Password/Ganti User/Dark Mode ada DI DALAM Pengaturan
+  // admin (admin shift): Input Data (shift) + Monitoring (shift sendiri) + Pengaturan
+  // admin_atas (admin atas): Input Data (rekap harian) + Monitoring (semua shift + rekap) + Pengaturan
+  // viewer: hanya Approval + Pengaturan
 
   const links = [
     { href: '/dashboard',    label: 'Dashboard',      show: isSuper },
     { href: '/input',        label: 'Input Data',     show: isAdminShift || isAdminAtas || isSuper },
     { href: '/monitoring',   label: 'Monitoring',     show: isAdminShift || isAdminAtas || isSuper },
     { href: '/approval',     label: '⚠️ Approval',    show: isViewer || isSuper },
-    { href: '/password',     label: 'Password',       show: true },
-    { href: '/users',        label: 'Users',          show: isSuper },
-    { href: '/pengaturan',   label: '⚙️ Pengaturan',  show: isSuper },
+    { href: '/pengaturan',   label: '⚙️ Pengaturan',  show: true },
     { href: '/log',          label: '📋 Log',         show: isSuper },
   ];
 
@@ -101,7 +90,6 @@ export default function Nav() {
           <a key={l.href} href={l.href} className={pathname.startsWith(l.href) ? 'active' : ''}>{l.label}</a>
         ))}
         <a href="#" onClick={e => { e.preventDefault(); setDownloadState('confirm'); }}>⬇️ Download Excel</a>
-        <a href="#" onClick={e => { e.preventDefault(); toggleTheme(); }}>{theme === 'dark' ? '☀️ Light Mode' : '🌙 Dark Mode'}</a>
       </div>
 
       {downloadState === 'confirm' && (
