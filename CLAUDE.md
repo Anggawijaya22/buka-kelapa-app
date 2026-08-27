@@ -146,6 +146,13 @@ Admin input data langsung dari HP → tulis ke Excel OneDrive → n8n baca Excel
   `<head>` yang set atribut ini SEBELUM React render, supaya tidak kedip putih dulu waktu reload/buka app
   bagi user yang sudah pilih dark mode.
 
+### Logo & Favicon
+- Logo asli (ikon kelapa hijau, file `public/icon-192.png`/`icon-512.png`, sebelumnya cuma dipakai
+  untuk ikon PWA) sekarang JUGA dipakai untuk: (1) favicon tab browser — via `metadata.icons` di
+  `src/app/layout.js` (Next.js otomatis generate `<link rel="icon">`/`apple-touch-icon` dari situ,
+  jadi tidak perlu file `favicon.ico` terpisah), dan (2) logo di halaman login (`src/app/page.js`),
+  menggantikan emoji 🥥 yang dipakai sebelumnya.
+
 ### Form Input Data (validasi, draft, popup hasil)
 - **Semua field wajib diisi** (termasuk 15 field PH Santan) sebelum submit bisa jalan — divalidasi oleh
   `validateProductionForm()` di `src/lib/ProductionFormFields.js`. Kalau ada yang kosong: submit diblokir
@@ -156,15 +163,60 @@ Admin input data langsung dari HP → tulis ke Excel OneDrive → n8n baca Excel
   diam sehingga "79.911,00" jadi "7.991.100" yang salah total. Tampilan saat fokus menunjukkan persis apa
   yang diketik user (termasuk komanya); setelah blur tetap diformat ribuan-titik/desimal-koma seperti biasa.
   Kontrak `onChange` tidak berubah — tetap raw dot-decimal ("79911.00") untuk kompatibilitas Excel.
-- **Popup hasil submit**: `src/lib/useResultModal.js`, dipakai di submit Input Data, Simpan Perubahan
-  Monitoring, dan tombol LIBUR PRODUKSI. Sukses → "✅ DATA BERHASIL DIKIRIM" + tombol OK (kembali ke
-  menu/tutup, form/draft otomatis bersih). Gagal → "❌ DATA GAGAL DIKIRIM" + tombol "Kirim Ulang"
-  (retry pakai payload yang sama) atau "Kembali" (tutup, data isian tetap ada, tidak hilang).
-- **Draft otomatis + tombol Refresh**: HANYA di `/input/form` (input baru), TIDAK di Monitoring (edit).
-  Form auto-save ke `localStorage` (key `bk_draft_<target>_<waktu>`) tiap kali user mengetik. Kalau
-  HP/PC mati di tengah proses, buka lagi form yang sama → tombol "🔄 Refresh" muncul (kalau ada draft
-  tersimpan) → klik untuk memuat ulang isian sebelumnya (ada konfirmasi supaya tidak menimpa isian baru
-  yang sedang diketik tanpa sengaja). Draft dihapus otomatis setelah submit berhasil.
+- **Popup hasil submit**: `src/lib/useResultModal.js`, dipakai di submit/Simpan Input Data, Simpan
+  Perubahan/Kirim Data Monitoring, dan tombol LIBUR PRODUKSI. Sukses → "✅ DATA BERHASIL DIKIRIM" +
+  tombol OK (kembali ke menu/tutup, form/draft otomatis bersih). Gagal → "❌ DATA GAGAL DIKIRIM" +
+  tombol "Kirim Ulang" (retry pakai payload yang sama) atau "Kembali" (tutup, data isian tetap ada,
+  tidak hilang).
+- **Draft otomatis + tombol Refresh** (localStorage, BEDA dari fitur "Simpan" di bawah — ini cuma
+  jaga-jaga kalau HP/PC mati sebelum sempat tekan tombol apa pun): HANYA di `/input/form` (input baru),
+  TIDAK di Monitoring. Form auto-save ke `localStorage` (key `bk_draft_<target>_<waktu>`) tiap kali user
+  mengetik. Kalau HP/PC mati di tengah proses, buka lagi form yang sama → tombol "🔄 Refresh" muncul
+  (kalau ada draft tersimpan) → klik untuk memuat ulang isian sebelumnya (ada konfirmasi supaya tidak
+  menimpa isian baru yang sedang diketik tanpa sengaja). Draft localStorage ini dihapus otomatis setelah
+  Simpan ATAU Kirim Data berhasil (lihat section berikut untuk beda keduanya).
+
+### Simpan vs Kirim Data (draft tersimpan di Supabase, & kunci 3x kirim)
+Berlaku untuk Admin Shift & Admin Atas (dan Developer, tanpa batasan kunci). Form Input Data
+(`src/app/input/form/page.js`) dan form edit di Monitoring (`src/app/monitoring/page.js`) SEKARANG
+punya 3 tombol dengan urutan tampil: **1. Simpan, 2. Kembali/Batal, 3. Kirim Data** (hijau).
+
+- **💾 Simpan** — insert/update baris ke tabel `submissions` dengan `status='draft'`, `send_count=0`.
+  TIDAK menulis ke Excel, TIDAK trigger webhook n8n (jadi TIDAK ada WA terkirim), dan TIDAK kena
+  cooldown submit sama sekali (karena tidak ada WA yang perlu dicegah spam-nya). Tidak ada deteksi
+  anomali EF WM (tidak relevan, tidak ada yang dinotifikasi). Data yang disimpan ini LANGSUNG muncul
+  di menu Monitoring (termasuk Monitoring milik Developer) dengan badge "📝 Draft — belum dikirim",
+  dan tetap bisa diedit bebas berkali-kali dari Monitoring TANPA kena hitungan kunci (hitungan 3x
+  baru mulai jalan setelah pertama kali BENERAN terkirim ke Excel — lihat "Kirim Data" di bawah).
+- **← Kembali / Batal** — fungsinya sama seperti sebelumnya: kembali tanpa mengirim apa pun, data
+  isian di form (kalau di `/input/form`) tetap ada di draft localStorage (BUKAN dihapus).
+- **📤 Kirim Data** — SEBELUM benar-benar kirim, muncul popup konfirmasi **"Yakin kirim data?"**
+  dengan tombol **Ya (hijau)** / **Batal (merah)** — hook `src/lib/useConfirm.js`. Kalau Ya (dan tidak
+  ada anomali EF WM terdeteksi — anomali tetap lewat jalur approval viewer seperti biasa, popup "Yakin
+  kirim data?" ini di-skip karena modal anomali sudah jadi bentuk konfirmasinya sendiri): data ditulis
+  ke Excel + trigger webhook n8n (WA), `status` jadi `'sent'`, `send_count` jadi 1 (submit pertama kali
+  dari Input Data) atau bertambah 1 dari nilai sebelumnya (kalau ini "kirim ulang" record yang sudah
+  pernah dikirim, lewat Monitoring).
+- **Kunci setelah 3x kirim** (`MAX_SEND_COUNT = 3` di `src/app/api/monitoring/route.js`): setiap kali
+  sebuah record (baris `submissions`) BENERAN terkirim ke Excel — via Input Data langsung, ATAU via
+  edit+Kirim Data di Monitoring — `send_count` bertambah 1. Begitu `send_count` mencapai 3, record itu
+  **terkunci**: Admin Shift & Admin Atas tidak bisa lihat tombol Edit lagi di Monitoring untuk record
+  itu (ditandai badge "🔒 Terkirim 3x — terkunci" + pesan merah), dan API `PUT /api/monitoring` menolak
+  (403) percobaan edit/kirim ke-4 untuk role selain superadmin. **Developer (superadmin) SELALU bisa
+  edit & kirim ulang tanpa batas**, bahkan setelah terkunci. Satu-satunya jalan lain kalau admin
+  butuh koreksi setelah terkunci: input ulang dari awal lewat menu Input Data (jadi baris `submissions`
+  baru, `send_count` mulai dari 0/1 lagi) — atau minta Developer yang edit.
+- Kolom baru di tabel `submissions`: `status` (`'draft'|'sent'`, default `'sent'` untuk baris lama
+  sebelum fitur ini ada — supaya tidak retroaktif mengunci data lama) dan `send_count` (integer,
+  default 1 untuk baris lama). Migrasi: `add_draft_status_and_send_count`.
+- Di Monitoring, record `status='draft'` menampilkan 3 tombol yang sama (Simpan/Batal/Kirim Data —
+  Simpan di sini artinya update draft tanpa kirim). Record `status='sent'` (baik masih di bawah 3x
+  atau sudah dikunci) hanya punya SATU tombol "💾 Simpan Perubahan" kalau belum terkunci (selalu
+  berarti kirim ulang, karena begitu sebuah record pernah live di Excel tidak ada lagi opsi "simpan
+  tanpa kirim" untuknya) — konsisten dengan perilaku Monitoring sebelum fitur ini ada.
+- Audit log: `SIMPAN_<TARGET>` untuk aksi Simpan (baik dari Input Data maupun update draft di
+  Monitoring), `SUBMIT_<TARGET>`/`EDIT_<TARGET>` untuk aksi Kirim Data (seperti sebelumnya) — mapping
+  label ada di `formatLog()` di `src/app/log/page.js`.
 
 ### Menu Monitoring (dulu bernama History)
 - Route: `/monitoring`, API: `src/app/api/monitoring/route.js` (GET = lihat, PUT = edit).
@@ -225,11 +277,13 @@ created_at, updated_at
 id bigint identity, user_id (→ users.id ON DELETE SET NULL), username text,
 target text ('shiftA'|'shiftB'|'shiftC'|'rekap'),   -- 'waktu' pagi/siang/malam ada DI DALAM payload, bukan kolom sendiri
 tanggal date, payload jsonb,                         -- payload = seluruh isi form yang disubmit (sumber histori)
+status text ('draft'|'sent') default 'sent',         -- 'draft' = baru "Simpan", belum pernah ke Excel/WA
+send_count int default 1,                            -- nambah tiap kali BENERAN "Kirim Data"; >=3 = terkunci (lihat "Simpan vs Kirim Data")
 edited_at timestamptz, edited_by_id (→ users.id ON DELETE SET NULL), edited_by_username text,
 created_at timestamptz
 ```
 > Tidak ada unique constraint di `(target, tanggal)` — bisa ada beberapa baris kalau pernah disubmit
-> ulang; "data terkini" = baris dengan `created_at` terbaru per target+tanggal (lihat `api/history` GET).
+> ulang; "data terkini" = baris dengan `created_at` terbaru per target+tanggal (lihat `api/monitoring` GET).
 
 ### `app_settings`
 ```sql
@@ -268,6 +322,7 @@ action, detail jsonb, created_at
 | `add_admin_atas_role` (via MCP, tanpa file lokal) | ✅ SUDAH dijalankan (`users_role_check` diperluas untuk mengizinkan `admin_atas`) |
 | `add_history_edit_and_cooldown_support` (via MCP, tanpa file lokal) | ✅ SUDAH dijalankan (tabel `app_settings`, kolom `users.last_submit_at`, kolom `submissions.edited_at`/`edited_by_id`/`edited_by_username`) |
 | `add_catatan_to_pending_approvals` (via MCP, tanpa file lokal) | ✅ SUDAH dijalankan (kolom `pending_approvals.catatan`, catatan wajib admin saat tetap kirim data anomali) |
+| `add_draft_status_and_send_count` (via MCP, tanpa file lokal) | ✅ SUDAH dijalankan (kolom `submissions.status`/`send_count`, dasar fitur Simpan/Kirim Data & kunci 3x kirim) |
 
 > Untuk migrasi berikutnya: **gunakan Supabase MCP `apply_migration`** — tidak perlu copy-paste ke SQL Editor manual.
 
@@ -325,12 +380,14 @@ C:\buka-kelapa-app\
 │   │                        yang dulu berdiri sendiri SUDAH DIHAPUS, digabung ke sini.
 │   └── (pages lain)/
 ├── src/lib/
-│   ├── submitFlow.js             ← executeShiftSubmit/executeRekapSubmit (insert baru) +
-│   │                                executeShiftEdit/executeRekapEdit (update History)
-│   ├── ProductionFormFields.js   ← field form shift/rekap, dipakai bareng Input Data & History
+│   ├── submitFlow.js             ← executeShiftSubmit/executeRekapSubmit (insert baru, dukung mode
+│   │                                'draft'/'sent') + executeShiftEdit/executeRekapEdit (update
+│   │                                Monitoring, dukung send true/false)
+│   ├── ProductionFormFields.js   ← field form shift/rekap, dipakai bareng Input Data & Monitoring
 │   ├── cooldown.js, settings.js  ← logic cooldown submit & pengaturan
 │   ├── useCooldown.js, CooldownNotice.js ← hook + komponen UI hitung mundur
 │   ├── useResultModal.js         ← popup "DATA BERHASIL/GAGAL DIKIRIM" (OK / Kirim Ulang / Kembali)
+│   ├── useConfirm.js             ← modal konfirmasi Ya/Batal generik, dipakai "Yakin kirim data?"
 │   ├── theme.js                  ← get/setTheme, dark mode per-user via localStorage (bk_theme)
 │   └── KgInput.js                ← input angka format ID, terima koma ATAU titik sbg desimal
 ├── .env.local            ← credentials (jangan commit)

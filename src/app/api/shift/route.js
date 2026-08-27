@@ -12,7 +12,8 @@ export async function POST(req) {
     return NextResponse.json({ error: 'Anda tidak punya akses untuk input data shift' }, { status: 403 });
   }
 
-  const { target, waktu, form } = await req.json();
+  const { target, waktu, form, mode } = await req.json();
+  const isDraft = mode === 'draft';
   if (!SHIFT_LABELS[target]) {
     return NextResponse.json({ error: 'Target shift tidak valid' }, { status: 400 });
   }
@@ -31,13 +32,19 @@ export async function POST(req) {
     return NextResponse.json({ error: 'Tanggal wajib diisi' }, { status: 400 });
   }
 
-  const cd = await checkCooldown(auth.session);
-  if (!cd.ok) {
-    return NextResponse.json({ error: `Tunggu ${cd.remainingSeconds} detik lagi sebelum submit berikutnya`, cooldownRemainingSeconds: cd.remainingSeconds }, { status: 429 });
+  // Simpan sebagai draft TIDAK kena cooldown (tidak kirim WA/Excel sama sekali)
+  if (!isDraft) {
+    const cd = await checkCooldown(auth.session);
+    if (!cd.ok) {
+      return NextResponse.json({ error: `Tunggu ${cd.remainingSeconds} detik lagi sebelum submit berikutnya`, cooldownRemainingSeconds: cd.remainingSeconds }, { status: 429 });
+    }
   }
 
   try {
-    const result = await executeShiftSubmit({ target, waktu, form, actorSession: auth.session });
+    const result = await executeShiftSubmit({ target, waktu, form, actorSession: auth.session, mode: isDraft ? 'draft' : 'sent' });
+    if (isDraft) {
+      return NextResponse.json({ ok: true, ...result });
+    }
     await markSubmitted(auth.session.id);
     const cooldownMinutes = await getCooldownMinutes();
     return NextResponse.json({ ok: true, ...result, cooldownSeconds: cooldownMinutes * 60 });

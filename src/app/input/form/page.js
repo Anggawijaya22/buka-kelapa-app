@@ -6,6 +6,7 @@ import ProductionFormFields, { emptyPh, phToPayload, validateProductionForm } fr
 import CooldownNotice from '@/lib/CooldownNotice';
 import useCooldown from '@/lib/useCooldown';
 import useResultModal from '@/lib/useResultModal';
+import useConfirm from '@/lib/useConfirm';
 
 const WAKTU_EMOJI = { pagi: '🌅', siang: '☀️', malam: '🌙' };
 
@@ -86,6 +87,8 @@ function FormInner() {
   const [anomaliModal, confirmAnomali] = useAnomaliConfirm();
   const cooldown = useCooldown();
   const { modal: resultModal, showSuccess, showError } = useResultModal();
+  const { modal: confirmModal, confirm: askKirimConfirm } = useConfirm();
+  const [savingDraft, setSavingDraft] = useState(false);
 
   function set(field, value) {
     setForm(f => ({ ...f, [field]: value }));
@@ -165,6 +168,53 @@ function FormInner() {
     }
   }
 
+  function buildPayload() {
+    const payload = {
+      ...form,
+      tanggal: toExcelDate(form.tanggal),
+      tanggalIso: form.tanggal
+    };
+    if (!isRekap) payload.phSantan = phToPayload(ph);
+    return payload;
+  }
+
+  // Tombol "Simpan" — cuma masuk ke Monitoring (Supabase), TIDAK ke Excel/webhook sama sekali.
+  // Tidak ada deteksi anomali (tidak relevan, karena tidak ada notifikasi WA yang dikirim).
+  async function doSimpan() {
+    setSavingDraft(true);
+    setMsg({ type: '', text: '' });
+
+    const url = isRekap ? '/api/rekap' : '/api/shift';
+    const body = isRekap ? { form: buildPayload(), mode: 'draft' } : { target, waktu, form: buildPayload(), mode: 'draft' };
+
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    setSavingDraft(false);
+
+    if (!res.ok) {
+      showError(data.error, doSimpan);
+      return;
+    }
+    clearDraft();
+    showSuccess('Data tersimpan sebagai draft di menu Monitoring — belum dikirim ke Excel/WA. Bisa dicek, diedit, atau dikirim kapan saja dari sana.', () => router.push('/input'));
+  }
+
+  function handleSimpan(e) {
+    e.preventDefault();
+    const { valid, errors: newErrors } = validateProductionForm(isRekap, form, ph);
+    setErrors(newErrors);
+    if (!valid) {
+      setMsg({ type: 'error', text: '⚠️ Data belum lengkap. Isi semua kolom yang ditandai merah (boleh isi 0 kalau memang tidak ada nilainya).' });
+      return;
+    }
+    setMsg({ type: '', text: '' });
+    doSimpan();
+  }
+
   async function doSubmit() {
     if (cooldown.remaining > 0) return;
     setMsg({ type: '', text: '' });
@@ -178,14 +228,7 @@ function FormInner() {
 
       // Tetap Kirim → JANGAN langsung ke Excel/n8n, kirim dulu ke antrian approval Viewer/Superadmin
       setLoading(true);
-      const payload = {
-        ...form,
-        tanggal: toExcelDate(form.tanggal),
-        tanggalIso: form.tanggal
-      };
-      if (!isRekap) {
-        payload.phSantan = phToPayload(ph);
-      }
+      const payload = buildPayload();
 
       const res = await fetch('/api/approvals', {
         method: 'POST',
@@ -208,18 +251,12 @@ function FormInner() {
       return;
     }
 
-    // Tidak anomali → kirim seperti biasa, langsung ke Excel + WA
+    // Tidak anomali → minta konfirmasi dulu, baru kirim langsung ke Excel + WA
+    const yakin = await askKirimConfirm('Yakin kirim data?');
+    if (!yakin) return; // Batal — kembali ke form, data isian tetap ada
+
     setLoading(true);
-
-    const payload = {
-      ...form,
-      tanggal: toExcelDate(form.tanggal),
-      tanggalIso: form.tanggal
-    };
-
-    if (!isRekap) {
-      payload.phSantan = phToPayload(ph);
-    }
+    const payload = buildPayload();
 
     const url = isRekap ? '/api/rekap' : '/api/shift';
     const body = isRekap ? { form: payload } : { target, waktu, form: payload };
@@ -269,6 +306,7 @@ function FormInner() {
       <Nav />
       {anomaliModal}
       {resultModal}
+      {confirmModal}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
         <h1>{title}</h1>
         {hasDraft && (
@@ -277,7 +315,10 @@ function FormInner() {
           </button>
         )}
       </div>
-      <p className="sub">Semua kolom wajib diisi (boleh 0 kalau memang tidak ada nilainya). Setelah simpan, laporan WA otomatis terkirim.</p>
+      <p className="sub">
+        Semua kolom wajib diisi (boleh 0 kalau memang tidak ada nilainya). "Simpan" hanya masuk ke
+        Monitoring (belum ke Excel/WA); "Kirim Data" langsung kirim ke Excel & WA.
+      </p>
 
       <form onSubmit={handleSubmit}>
         <div className="card">
@@ -289,10 +330,13 @@ function FormInner() {
 
         {msg.text && <p className={msg.type}>{msg.text}</p>}
         <CooldownNotice seconds={cooldown.remaining} />
-        <button disabled={loading || cooldown.remaining > 0}>
-          {loading ? 'Menyimpan & mengirim...' : '💾 Simpan & Kirim WA'}
+        <button type="button" className="secondary" disabled={savingDraft} onClick={handleSimpan}>
+          {savingDraft ? 'Menyimpan...' : '💾 Simpan'}
         </button>
         <button type="button" className="secondary" onClick={() => router.push('/input')}>← Kembali</button>
+        <button disabled={loading || cooldown.remaining > 0}>
+          {loading ? 'Mengirim...' : '📤 Kirim Data'}
+        </button>
       </form>
     </div>
   );

@@ -78,6 +78,11 @@ function formatLog(log) {
     return { label: `✏️ Edit Data ${TARGET_LABELS[editMatch[1]]}`, info: extraTanggalWaktu(detail) };
   }
 
+  const simpanMatch = action.match(/^SIMPAN_(SHIFTA|SHIFTB|SHIFTC|REKAP)$/);
+  if (simpanMatch) {
+    return { label: `💾 Simpan Draft ${TARGET_LABELS[simpanMatch[1]]}`, info: extraTanggalWaktu(detail) };
+  }
+
   if (SIMPLE_LABELS[action]) {
     return { label: SIMPLE_LABELS[action], info: extraGeneric(action, detail) };
   }

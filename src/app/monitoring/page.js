@@ -5,6 +5,7 @@ import ProductionFormFields, { emptyPh, phFromPayload, phToPayload, validateProd
 import CooldownNotice from '@/lib/CooldownNotice';
 import useCooldown from '@/lib/useCooldown';
 import useResultModal from '@/lib/useResultModal';
+import useConfirm from '@/lib/useConfirm';
 
 const TARGET_LABELS = { shiftA: 'Shift A', shiftB: 'Shift B', shiftC: 'Shift C', rekap: '📋 Rekap Harian' };
 
@@ -19,12 +20,27 @@ const FIELD_LABELS_REKAP = {
   ttlSantan: 'TTL Santan (Kg)', akumSantan: 'Akum Santan (Kg)', sisaKlp: 'Sisa Kelapa'
 };
 
+const DEFAULT_MAX_SEND_COUNT = 3;
+
 function todayStr() {
   return new Date().toISOString().slice(0, 10);
 }
 
 function waktuLabel(w) {
   return { pagi: '🌅 Pagi', siang: '☀️ Siang', malam: '🌙 Malam' }[w] || w || '';
+}
+
+function StatusBadge({ item, maxSendCount }) {
+  if (item.status === 'draft') {
+    return <span className="badge admin_atas">📝 Draft — belum dikirim</span>;
+  }
+  const count = item.send_count || 1;
+  const locked = count >= maxSendCount;
+  return (
+    <span className={`badge ${locked ? 'superadmin' : 'admin'}`}>
+      {locked ? '🔒' : '✅'} Terkirim {count}x{locked ? ' — terkunci' : ''}
+    </span>
+  );
 }
 
 function Ringkasan({ item }) {
@@ -49,39 +65,50 @@ function Ringkasan({ item }) {
 
 function EditForm({ item, cooldown, onSaved, onCancel }) {
   const isRekap = item.target === 'rekap';
+  const isDraft = item.status === 'draft';
   const [form, setForm] = useState({ ...item.payload });
   const [ph, setPh] = useState(isRekap ? emptyPh() : phFromPayload(item.payload?.phSantan));
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
+  const [savingDraft, setSavingDraft] = useState(false);
   const [msg, setMsg] = useState({ type: '', text: '' });
   const { modal: resultModal, showSuccess, showError } = useResultModal();
+  const { modal: confirmModal, confirm: askKirimConfirm } = useConfirm();
 
   function set(field, value) { setForm(f => ({ ...f, [field]: value })); }
   function setPhField(line, key, value) { setPh(p => ({ ...p, [line]: { ...p[line], [key]: value } })); }
 
-  async function doSave() {
-    if (cooldown.remaining > 0) return;
-    setSaving(true);
-    setMsg({ type: '', text: '' });
-
+  function buildPayload() {
     const payload = { ...form };
     if (!isRekap) payload.phSantan = phToPayload(ph);
+    return payload;
+  }
+
+  async function doSave(send) {
+    if (send && cooldown.remaining > 0) return;
+    send ? setSaving(true) : setSavingDraft(true);
+    setMsg({ type: '', text: '' });
 
     const res = await fetch('/api/monitoring', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: item.id, form: payload })
+      body: JSON.stringify({ id: item.id, form: buildPayload(), send })
     });
     const data = await res.json();
     setSaving(false);
+    setSavingDraft(false);
 
     if (!res.ok) {
       if (data.cooldownRemainingSeconds) cooldown.start(data.cooldownRemainingSeconds);
-      showError(data.error, doSave);
+      showError(data.error, () => doSave(send));
       return;
     }
     if (data.cooldownSeconds) cooldown.start(data.cooldownSeconds);
 
+    if (!send) {
+      showSuccess('Perubahan draft tersimpan — masih belum dikirim ke Excel/WA.', () => onSaved?.());
+      return;
+    }
     let text = data.wroteToExcel
       ? `Perubahan tersimpan & ${data.cellsWritten} cell diupdate ke Excel.`
       : 'Perubahan tersimpan ke riwayat. Tanggal ini bukan hari ini, jadi Excel (laporan live) tidak disentuh.';
@@ -89,8 +116,7 @@ function EditForm({ item, cooldown, onSaved, onCancel }) {
     showSuccess(text, () => onSaved?.());
   }
 
-  function save() {
-    if (cooldown.remaining > 0) return;
+  function validateThenRun(run) {
     const { valid, errors: newErrors } = validateProductionForm(isRekap, form, ph);
     setErrors(newErrors);
     if (!valid) {
@@ -98,24 +124,57 @@ function EditForm({ item, cooldown, onSaved, onCancel }) {
       return;
     }
     setMsg({ type: '', text: '' });
-    doSave();
+    run();
+  }
+
+  function simpanDraft() {
+    validateThenRun(() => doSave(false));
+  }
+
+  function kirimData() {
+    if (cooldown.remaining > 0) return;
+    validateThenRun(async () => {
+      const yakin = await askKirimConfirm('Yakin kirim data?');
+      if (!yakin) return;
+      doSave(true);
+    });
+  }
+
+  function simpanPerubahan() {
+    if (cooldown.remaining > 0) return;
+    validateThenRun(() => doSave(true));
   }
 
   return (
     <div>
       {resultModal}
+      {confirmModal}
       <ProductionFormFields isRekap={isRekap} form={form} set={set} ph={ph} setPhField={setPhField} errors={errors} />
       {msg.text && <p className={msg.type}>{msg.text}</p>}
       <CooldownNotice seconds={cooldown.remaining} />
-      <button type="button" disabled={saving || cooldown.remaining > 0} onClick={save}>
-        {saving ? 'Menyimpan...' : '💾 Simpan Perubahan'}
-      </button>
-      <button type="button" className="secondary" onClick={onCancel}>Batal</button>
+      {isDraft ? (
+        <>
+          <button type="button" className="secondary" disabled={savingDraft} onClick={simpanDraft}>
+            {savingDraft ? 'Menyimpan...' : '💾 Simpan'}
+          </button>
+          <button type="button" className="secondary" onClick={onCancel}>Batal</button>
+          <button type="button" disabled={saving || cooldown.remaining > 0} onClick={kirimData}>
+            {saving ? 'Mengirim...' : '📤 Kirim Data'}
+          </button>
+        </>
+      ) : (
+        <>
+          <button type="button" disabled={saving || cooldown.remaining > 0} onClick={simpanPerubahan}>
+            {saving ? 'Menyimpan...' : '💾 Simpan Perubahan'}
+          </button>
+          <button type="button" className="secondary" onClick={onCancel}>Batal</button>
+        </>
+      )}
     </div>
   );
 }
 
-function Section({ item, cooldown, onChanged }) {
+function Section({ item, cooldown, isSuper, maxSendCount, onChanged }) {
   const [editing, setEditing] = useState(false);
   const label = TARGET_LABELS[item.target] || item.target;
 
@@ -128,20 +187,29 @@ function Section({ item, cooldown, onChanged }) {
     );
   }
 
+  const locked = item.status === 'sent' && (item.send_count || 1) >= maxSendCount && !isSuper;
+
   return (
     <div className="card">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h2>{label}</h2>
-        {!editing && (
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+        <h2 style={{ marginBottom: 0 }}>{label}</h2>
+        <StatusBadge item={item} maxSendCount={maxSendCount} />
+        {!editing && !locked && (
           <button type="button" className="secondary" style={{ width: 'auto', padding: '6px 14px', marginTop: 0 }} onClick={() => setEditing(true)}>
             ✏️ Edit
           </button>
         )}
       </div>
-      <p className="sub">
-        Dikirim {new Date(item.created_at).toLocaleString('id-ID', { dateStyle: 'short', timeStyle: 'short' })} oleh {item.username || '-'}
+      <p className="sub" style={{ marginTop: 8 }}>
+        {item.status === 'draft' ? 'Disimpan' : 'Dikirim'} {new Date(item.created_at).toLocaleString('id-ID', { dateStyle: 'short', timeStyle: 'short' })} oleh {item.username || '-'}
         {item.edited_at && ` · diedit terakhir ${new Date(item.edited_at).toLocaleString('id-ID', { dateStyle: 'short', timeStyle: 'short' })} oleh ${item.edited_by_username || '-'}`}
       </p>
+      {locked && (
+        <p className="error" style={{ marginBottom: 12 }}>
+          🔒 Data ini sudah dikirim {maxSendCount}x dan terkunci untuk revisi lebih lanjut. Hubungi Developer,
+          atau input ulang dari menu Input Data kalau memang perlu koreksi.
+        </p>
+      )}
       {editing ? (
         <EditForm
           item={item}
@@ -160,6 +228,7 @@ export default function MonitoringPage() {
   const [role, setRole] = useState('');
   const [tanggal, setTanggal] = useState(todayStr());
   const [items, setItems] = useState([]);
+  const [maxSendCount, setMaxSendCount] = useState(DEFAULT_MAX_SEND_COUNT);
   const [loading, setLoading] = useState(true);
   const [forbidden, setForbidden] = useState(false);
   const cooldown = useCooldown();
@@ -179,6 +248,7 @@ export default function MonitoringPage() {
     if (res.status === 403) { setForbidden(true); setLoading(false); return; }
     const d = await res.json();
     setItems(d.items || []);
+    if (d.maxSendCount) setMaxSendCount(d.maxSendCount);
     setLoading(false);
   }
 
@@ -190,6 +260,8 @@ export default function MonitoringPage() {
       </div>
     );
   }
+
+  const isSuper = role === 'superadmin';
 
   return (
     <div className="container">
@@ -208,7 +280,7 @@ export default function MonitoringPage() {
 
       {loading && <p>Memuat...</p>}
       {!loading && items.map(item => (
-        <Section key={item.target} item={item} cooldown={cooldown} onChanged={load} />
+        <Section key={item.target} item={item} cooldown={cooldown} isSuper={isSuper} maxSendCount={maxSendCount} onChanged={load} />
       ))}
     </div>
   );
