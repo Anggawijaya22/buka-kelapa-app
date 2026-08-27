@@ -21,6 +21,14 @@ export default function RootLayout({ children }) {
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
         <meta name="apple-mobile-web-app-title" content="BukaKelapa" />
+        {/* Terapkan dark mode SEBELUM render supaya tidak kedip putih dulu (tiap user pilih sendiri, tersimpan di localStorage) */}
+        <script dangerouslySetInnerHTML={{ __html: `
+          try {
+            if (localStorage.getItem('bk_theme') === 'dark') {
+              document.documentElement.setAttribute('data-theme', 'dark');
+            }
+          } catch (e) {}
+        `}} />
       </head>
       <body>
         {children}

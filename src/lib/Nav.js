@@ -1,6 +1,7 @@
 'use client';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { getTheme, setTheme } from '@/lib/theme';
 
 const OVERLAY_STYLE = {
   position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
@@ -12,10 +13,18 @@ export default function Nav() {
   const router = useRouter();
   const [role, setRole] = useState('');
   const [downloadState, setDownloadState] = useState(null); // null | 'confirm' | 'downloading'
+  const [theme, setThemeState] = useState('light');
 
   useEffect(() => {
     setRole(sessionStorage.getItem('bk_role') || '');
+    setThemeState(getTheme());
   }, []);
+
+  function toggleTheme() {
+    const next = theme === 'dark' ? 'light' : 'dark';
+    setTheme(next);
+    setThemeState(next);
+  }
 
   async function logout() {
     await fetch('/api/auth/logout', { method: 'POST' });
@@ -92,6 +101,7 @@ export default function Nav() {
           <a key={l.href} href={l.href} className={pathname.startsWith(l.href) ? 'active' : ''}>{l.label}</a>
         ))}
         <a href="#" onClick={e => { e.preventDefault(); setDownloadState('confirm'); }}>⬇️ Download Excel</a>
+        <a href="#" onClick={e => { e.preventDefault(); toggleTheme(); }}>{theme === 'dark' ? '☀️ Light Mode' : '🌙 Dark Mode'}</a>
       </div>
 
       {downloadState === 'confirm' && (

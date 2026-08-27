@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import Nav from '@/lib/Nav';
+import { getTheme, setTheme } from '@/lib/theme';
 
 export default function PengaturanPage() {
   const [cooldownMinutes, setCooldownMinutes] = useState('');
@@ -8,8 +9,18 @@ export default function PengaturanPage() {
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState({ type: '', text: '' });
   const [forbidden, setForbidden] = useState(false);
+  const [theme, setThemeState] = useState('light');
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    setThemeState(getTheme());
+  }, []);
+
+  function toggleTheme() {
+    const next = theme === 'dark' ? 'light' : 'dark';
+    setTheme(next);
+    setThemeState(next);
+  }
 
   async function load() {
     setLoading(true);
@@ -49,6 +60,18 @@ export default function PengaturanPage() {
       <Nav />
       <h1>⚙️ Pengaturan</h1>
       <p className="sub">Pengaturan aplikasi khusus Developer</p>
+
+      <div className="card">
+        <h2>Tampilan</h2>
+        <p className="sub">
+          Dark mode ini pilihan pribadi (tersimpan di HP/browser Anda sendiri) — semua role
+          (Admin Shift, Admin Atas, Viewer, Developer) juga bisa ganti tema masing-masing lewat
+          menu "🌙 Dark Mode" di Nav, tidak cuma di sini.
+        </p>
+        <button type="button" className="secondary" onClick={toggleTheme}>
+          {theme === 'dark' ? '☀️ Ganti ke Light Mode' : '🌙 Ganti ke Dark Mode'}
+        </button>
+      </div>
 
       <div className="card">
         <h2>Cooldown Submit</h2>

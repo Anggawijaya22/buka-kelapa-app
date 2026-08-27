@@ -110,10 +110,25 @@ Admin input data langsung dari HP → tulis ke Excel OneDrive → n8n baca Excel
   username terkait, bukan detail form lengkap — detail lengkap input data ada di menu Monitoring).
   Mapping label ada di `formatLog()` di `src/app/log/page.js`, cocokkan action code baru kalau nambah
   `logAudit()` call baru di API lain.
+- Ada date picker (default hari ini, sama seperti Monitoring) supaya tidak menumpuk — filter di server
+  via `?tanggal=YYYY-MM-DD` (`api/logs` GET, filter `created_at` dalam rentang hari itu). Tombol
+  "Tampilkan Semua Tanggal" mengosongkan filter (balik ke default lama: 300 baris terbaru semua tanggal).
 
 ### Tombol Keluar
 - Dipindah keluar dari deretan menu Nav — sekarang `position: fixed` di pojok kanan atas layar (semua
   halaman), bentuknya beda (pil merah solid) supaya tidak tertukar dengan menu lain. Lihat `src/lib/Nav.js`.
+
+### Dark Mode (pilihan pribadi tiap user)
+- Toggle "🌙 Dark Mode / ☀️ Light Mode" ada di Nav (`src/lib/Nav.js`, tampil untuk SEMUA role) dan
+  duplikatnya di menu Pengaturan (khusus Developer, sekadar biar gampang ditemukan di sana juga) —
+  keduanya panggil util yang sama: `src/lib/theme.js` (`getTheme`/`setTheme`).
+- Preferensi disimpan per-browser di `localStorage` (key `bk_theme`), BUKAN setting global di database —
+  jadi tiap user (termasuk yang login di HP/browser sama-sama) pilih temanya sendiri-sendiri, tidak saling
+  memengaruhi.
+- Diterapkan via atribut `data-theme="dark"` di `<html>`, dengan override variabel CSS di
+  `:root[data-theme="dark"]` (`src/app/globals.css`). `src/app/layout.js` punya inline script kecil di
+  `<head>` yang set atribut ini SEBELUM React render, supaya tidak kedip putih dulu waktu reload/buka app
+  bagi user yang sudah pilih dark mode.
 
 ### Form Input Data (validasi, draft, popup hasil)
 - **Semua field wajib diisi** (termasuk 15 field PH Santan) sebelum submit bisa jalan — divalidasi oleh
@@ -298,6 +313,7 @@ C:\buka-kelapa-app\
 │   ├── cooldown.js, settings.js  ← logic cooldown submit & pengaturan
 │   ├── useCooldown.js, CooldownNotice.js ← hook + komponen UI hitung mundur
 │   ├── useResultModal.js         ← popup "DATA BERHASIL/GAGAL DIKIRIM" (OK / Kirim Ulang / Kembali)
+│   ├── theme.js                  ← get/setTheme, dark mode per-user via localStorage (bk_theme)
 │   └── KgInput.js                ← input angka format ID, terima koma ATAU titik sbg desimal
 ├── .env.local            ← credentials (jangan commit)
 ├── .mcp.json             ← Supabase MCP config (ref nrfbvhqjzfngyozduocw)

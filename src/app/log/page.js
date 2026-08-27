@@ -2,6 +2,10 @@
 import { useEffect, useState } from 'react';
 import Nav from '@/lib/Nav';
 
+function todayStr() {
+  return new Date().toISOString().slice(0, 10);
+}
+
 const TARGET_LABELS = { SHIFTA: 'Shift A', SHIFTB: 'Shift B', SHIFTC: 'Shift C', REKAP: 'Rekap Harian' };
 const WAKTU_LABELS = { pagi: 'Pagi', siang: 'Siang', malam: 'Malam' };
 
@@ -83,14 +87,18 @@ function formatLog(log) {
 
 export default function LogPage() {
   const [logs, setLogs] = useState([]);
+  const [tanggal, setTanggal] = useState(todayStr());
   const [loading, setLoading] = useState(true);
   const [forbidden, setForbidden] = useState(false);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tanggal]);
 
   async function load() {
     setLoading(true);
-    const res = await fetch('/api/logs');
+    const res = await fetch(`/api/logs?tanggal=${tanggal}`);
     if (res.status === 403) { setForbidden(true); setLoading(false); return; }
     const d = await res.json();
     setLogs(d.logs || []);
@@ -111,6 +119,16 @@ export default function LogPage() {
       <Nav />
       <h1>📋 Log Aktivitas</h1>
       <p className="sub">Riwayat aktivitas semua user — login, ganti password, kelola user, input/edit data, dll.</p>
+
+      <div className="card">
+        <label>Tanggal</label>
+        <input type="date" value={tanggal} max={todayStr()} onChange={e => setTanggal(e.target.value)} />
+        {tanggal && (
+          <button type="button" className="secondary" style={{ width: 'auto', padding: '6px 14px', marginTop: 8 }} onClick={() => setTanggal('')}>
+            Tampilkan Semua Tanggal
+          </button>
+        )}
+      </div>
 
       <div className="card" style={{ overflowX: 'auto' }}>
         {loading && <p>Memuat...</p>}
