@@ -2,3 +2,7 @@ node_modules/
 .next/
 .env.local
 .env
+
+# Dokumentasi/tooling lokal untuk asisten AI — tidak dipush ke GitHub, tidak dipakai aplikasi
+CLAUDE.md
+.claude/
