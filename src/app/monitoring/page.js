@@ -6,6 +6,8 @@ import CooldownNotice from '@/lib/CooldownNotice';
 import useCooldown from '@/lib/useCooldown';
 import useResultModal from '@/lib/useResultModal';
 import useConfirm from '@/lib/useConfirm';
+import useAnomaliConfirm from '@/lib/useAnomaliConfirm';
+import { detectShiftAnomali, detectRekapAnomali } from '@/lib/anomaliDetect';
 
 const TARGET_LABELS = { shiftA: 'Shift A', shiftB: 'Shift B', shiftC: 'Shift C', rekap: '📋 Rekap Harian' };
 
@@ -74,6 +76,7 @@ function EditForm({ item, cooldown, onSaved, onCancel }) {
   const [msg, setMsg] = useState({ type: '', text: '' });
   const { modal: resultModal, showSuccess, showError } = useResultModal();
   const { modal: confirmModal, confirm: askKirimConfirm } = useConfirm();
+  const [anomaliModal, confirmAnomali] = useAnomaliConfirm();
 
   function set(field, value) { setForm(f => ({ ...f, [field]: value })); }
   function setPhField(line, key, value) { setPh(p => ({ ...p, [line]: { ...p[line], [key]: value } })); }
@@ -116,6 +119,41 @@ function EditForm({ item, cooldown, onSaved, onCancel }) {
     showSuccess(text, () => onSaved?.());
   }
 
+  // Data anomali yang tetap dikirim TIDAK boleh langsung ke Excel/WA — harus lewat antrian
+  // approval Viewer/Developer dulu, persis seperti submit baru dari Input Data. Bedanya di sini
+  // approval-nya menunjuk ke record submissions yang sudah ada (submissionId), jadi begitu
+  // di-ACC nanti, hasilnya MENIMPA record yang sama, bukan bikin baris baru.
+  async function kirimKeApproval(payload, deteksi, catatan) {
+    setSaving(true);
+    setMsg({ type: '', text: '' });
+
+    const res = await fetch('/api/approvals', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        target: item.target,
+        waktu: item.payload?.waktu,
+        form: payload,
+        efWmPreview: deteksi.efWm,
+        reason: deteksi.reason,
+        catatan,
+        submissionId: item.id
+      })
+    });
+    const data = await res.json();
+    setSaving(false);
+
+    if (!res.ok) {
+      if (data.cooldownRemainingSeconds) cooldown.start(data.cooldownRemainingSeconds);
+      showError(data.error, () => kirimKeApproval(payload, deteksi, catatan));
+      return;
+    }
+    if (data.cooldownSeconds) cooldown.start(data.cooldownSeconds);
+    let text = 'Data anomali terkirim ke Viewer untuk persetujuan. Excel belum diupdate sampai di-ACC.';
+    text += data.waSent ? ' Notifikasi WA ke Viewer terkirim 📱' : ' (Notifikasi WA gagal terkirim, tapi tetap bisa dilihat Viewer di app)';
+    showSuccess(text, () => onSaved?.());
+  }
+
   function validateThenRun(run) {
     const { valid, errors: newErrors } = validateProductionForm(isRekap, form, ph);
     setErrors(newErrors);
@@ -131,22 +169,31 @@ function EditForm({ item, cooldown, onSaved, onCancel }) {
     validateThenRun(() => doSave(false));
   }
 
-  function kirimData() {
+  // Dipakai baik oleh "Kirim Data" (draft) maupun "Simpan Perubahan" (record yang sudah pernah
+  // dikirim) — keduanya sama-sama harus dicek anomali dulu sebelum benar-benar kirim ke Excel/WA.
+  function kirimAtauKirimUlang() {
     if (cooldown.remaining > 0) return;
     validateThenRun(async () => {
+      const payload = buildPayload();
+      const deteksi = isRekap ? await detectRekapAnomali() : detectShiftAnomali(payload);
+
+      if (deteksi.anomali) {
+        const pesan = `${deteksi.reason}\n\nAnda bisa:\n• Tetap Kirim — data akan dikirim ke Viewer untuk di-ACC dulu sebelum masuk Excel\n• Revisi Data — kembali mengecek isian form`;
+        const konfirmasi = await confirmAnomali(pesan);
+        if (!konfirmasi.confirmed) return; // Revisi — kembali ke form, tidak ada yang dikirim
+        await kirimKeApproval(payload, deteksi, konfirmasi.catatan);
+        return;
+      }
+
       const yakin = await askKirimConfirm('Yakin kirim data?');
       if (!yakin) return;
       doSave(true);
     });
   }
 
-  function simpanPerubahan() {
-    if (cooldown.remaining > 0) return;
-    validateThenRun(() => doSave(true));
-  }
-
   return (
     <div>
+      {anomaliModal}
       {resultModal}
       {confirmModal}
       <ProductionFormFields isRekap={isRekap} form={form} set={set} ph={ph} setPhField={setPhField} errors={errors} />
@@ -158,13 +205,13 @@ function EditForm({ item, cooldown, onSaved, onCancel }) {
             {savingDraft ? 'Menyimpan...' : '💾 Simpan'}
           </button>
           <button type="button" className="secondary" onClick={onCancel}>Batal</button>
-          <button type="button" disabled={saving || cooldown.remaining > 0} onClick={kirimData}>
+          <button type="button" disabled={saving || cooldown.remaining > 0} onClick={kirimAtauKirimUlang}>
             {saving ? 'Mengirim...' : '📤 Kirim Data'}
           </button>
         </>
       ) : (
         <>
-          <button type="button" disabled={saving || cooldown.remaining > 0} onClick={simpanPerubahan}>
+          <button type="button" disabled={saving || cooldown.remaining > 0} onClick={kirimAtauKirimUlang}>
             {saving ? 'Menyimpan...' : '💾 Simpan Perubahan'}
           </button>
           <button type="button" className="secondary" onClick={onCancel}>Batal</button>

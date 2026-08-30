@@ -7,12 +7,10 @@ import CooldownNotice from '@/lib/CooldownNotice';
 import useCooldown from '@/lib/useCooldown';
 import useResultModal from '@/lib/useResultModal';
 import useConfirm from '@/lib/useConfirm';
+import useAnomaliConfirm from '@/lib/useAnomaliConfirm';
+import { detectShiftAnomali, detectRekapAnomali } from '@/lib/anomaliDetect';
 
 const WAKTU_EMOJI = { pagi: '🌅', siang: '☀️', malam: '🌙' };
-
-// Sama persis dengan range di n8n — supaya deteksi anomali di app cocok dengan yang di WA
-const RANGE_MIN = 0.33;
-const RANGE_MAX = 0.361;
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10);
@@ -20,54 +18,6 @@ function todayStr() {
 function toExcelDate(iso) {
   const [y, m, d] = iso.split('-');
   return `${d}/${m}/${y.slice(2)}`;
-}
-function toIDDecimal(n) {
-  return n.toFixed(4).replace('.', ',');
-}
-
-// Modal konfirmasi anomali — dipakai berbasis Promise (mirip window.confirm tapi custom 2 tombol).
-// Catatan WAJIB diisi kalau user pilih "Tetap Kirim" — supaya viewer/developer tahu alasan admin
-// tetap mengirim data yang anomali.
-function useAnomaliConfirm() {
-  const [state, setState] = useState(null); // { message, resolve }
-  const [catatan, setCatatan] = useState('');
-
-  function confirmAnomali(message) {
-    setCatatan('');
-    return new Promise(resolve => {
-      setState({ message, resolve });
-    });
-  }
-  function handle(result) {
-    state.resolve(result);
-    setState(null);
-  }
-
-  const catatanKosong = catatan.trim() === '';
-
-  const modal = state ? (
-    <div style={{
-      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16
-    }}>
-      <div className="card" style={{ maxWidth: 420, width: '100%', margin: 0 }}>
-        <h2 style={{ color: 'var(--warn)' }}>⚠️ Anomali Terdeteksi</h2>
-        <p style={{ whiteSpace: 'pre-line', fontSize: 14, marginBottom: 4 }}>{state.message}</p>
-        <label>Catatan (wajib diisi kalau tetap kirim)</label>
-        <textarea
-          rows={3}
-          value={catatan}
-          onChange={e => setCatatan(e.target.value)}
-          placeholder="Contoh: sudah dicek ulang, memang segini hasilnya karena..."
-          style={{ width: '100%', padding: 12, border: '1px solid var(--border)', borderRadius: 8, fontSize: 15, fontFamily: 'inherit', resize: 'vertical' }}
-        />
-        <button disabled={catatanKosong} onClick={() => handle({ confirmed: true, catatan: catatan.trim() })}>✅ Tetap Kirim</button>
-        <button type="button" className="secondary" onClick={() => handle({ confirmed: false })}>✏️ Revisi Data</button>
-      </div>
-    </div>
-  ) : null;
-
-  return [modal, confirmAnomali];
 }
 
 function FormInner() {
@@ -125,49 +75,6 @@ function FormInner() {
     } catch {}
   }
 
-  // Cek anomali EF WM shift SEBELUM kirim — dihitung sendiri di app (EF WM = Kg WM / Buka Kelapa)
-  // sama seperti formula Excel. Hanya MENDETEKSI, tidak menampilkan dialog — dialog diatur di doSubmit().
-  function deteksiAnomaliShift() {
-    const bkKlpNum = parseFloat(form.bkKlp);
-    const kgWmNum = parseFloat(form.kgWm);
-    if (!isFinite(bkKlpNum) || !isFinite(kgWmNum) || bkKlpNum === 0) {
-      return { anomali: false }; // data belum lengkap untuk dihitung — lanjut kirim seperti biasa
-    }
-    const efWm = kgWmNum / bkKlpNum;
-    const isAnomali = efWm < RANGE_MIN || efWm > RANGE_MAX;
-    if (!isAnomali) return { anomali: false };
-
-    return {
-      anomali: true,
-      efWm,
-      reason: `EF WM diperkirakan: ${toIDDecimal(efWm)}\nRange normal: ${toIDDecimal(RANGE_MIN)} - ${toIDDecimal(RANGE_MAX)}\n\nCek kembali Kg WM dan Buka Kelapa (Kg) — mungkin ada salah ketik.`
-    };
-  }
-
-  // Cek anomali EF WM rekap — nilai EF WM rekap adalah akumulasi 3 shift yang SUDAH ada di Excel
-  // (bukan dari isian form rekap ini), jadi diambil dari data live dashboard sebelum submit.
-  async function deteksiAnomaliRekap() {
-    try {
-      const res = await fetch('/api/dashboard');
-      if (!res.ok) return { anomali: false };
-      const d = await res.json();
-      const raw = d?.live?.rekap?.efWm;
-      if (!raw || raw === '-') return { anomali: false };
-      const efWm = parseFloat(String(raw).replace(',', '.'));
-      if (!isFinite(efWm)) return { anomali: false };
-      const isAnomali = efWm < RANGE_MIN || efWm > RANGE_MAX;
-      if (!isAnomali) return { anomali: false };
-
-      return {
-        anomali: true,
-        efWm,
-        reason: `EF WM Rekap saat ini di Excel: ${toIDDecimal(efWm)}\nRange normal: ${toIDDecimal(RANGE_MIN)} - ${toIDDecimal(RANGE_MAX)}\n\nIni akumulasi dari 3 shift yang sudah masuk hari ini, bukan dari isian form Rekap ini.`
-      };
-    } catch {
-      return { anomali: false }; // gagal cek → jangan blok submit
-    }
-  }
-
   function buildPayload() {
     const payload = {
       ...form,
@@ -219,7 +126,7 @@ function FormInner() {
     if (cooldown.remaining > 0) return;
     setMsg({ type: '', text: '' });
 
-    const deteksi = isRekap ? await deteksiAnomaliRekap() : deteksiAnomaliShift();
+    const deteksi = isRekap ? await detectRekapAnomali() : detectShiftAnomali(form);
 
     if (deteksi.anomali) {
       const pesan = `${deteksi.reason}\n\nAnda bisa:\n• Tetap Kirim — data akan dikirim ke Viewer untuk di-ACC dulu sebelum masuk Excel\n• Revisi Data — kembali mengecek isian form`;

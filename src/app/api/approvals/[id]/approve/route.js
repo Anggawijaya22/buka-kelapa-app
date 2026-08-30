@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { db, logAudit } from '@/lib/db';
-import { executeShiftSubmit, executeRekapSubmit } from '@/lib/submitFlow';
+import { executeShiftSubmit, executeRekapSubmit, executeShiftEdit, executeRekapEdit } from '@/lib/submitFlow';
+import { todayIso } from '@/lib/date';
+import { MAX_SEND_COUNT } from '@/lib/limits';
 
 const APPROVER_ROLES = ['viewer', 'superadmin'];
 
@@ -41,17 +43,36 @@ export async function POST(req, { params }) {
   try {
     const actorSession = { id: claimed.submitted_by_id, username: claimed.submitted_by_username };
     const form = claimed.form_payload;
+    let result;
 
-    const result = claimed.target === 'rekap'
-      ? await executeRekapSubmit({ form, actorSession, actionLabel: 'SUBMIT_REKAP_ACC' })
-      : await executeShiftSubmit({ target: claimed.target, waktu: claimed.waktu, form, actorSession, actionLabel: 'SUBMIT_' + claimed.target.toUpperCase() + '_ACC' });
+    if (claimed.submission_id) {
+      // Ini pengajuan EDIT (data disimpan/dikirim dulu, lalu diedit ulang lewat Monitoring dan
+      // ternyata anomali) — bukan submission baru. Timpa payload record yang sama, jangan insert baru.
+      const { data: existing, error: existErr } = await db.from('submissions').select('*').eq('id', claimed.submission_id).maybeSingle();
+      if (existErr) throw new Error(existErr.message);
+      if (!existing) throw new Error('Data asli yang diedit sudah tidak ditemukan (mungkin sudah dihapus).');
+      if (existing.status === 'sent' && existing.send_count >= MAX_SEND_COUNT) {
+        throw new Error(`Data ini sudah dikirim ${MAX_SEND_COUNT}x dan terkunci sejak pengajuan ini dibuat — tidak bisa di-ACC lagi.`);
+      }
+
+      const writeToExcel = existing.tanggal === todayIso();
+      const sendCount = (existing.send_count || 0) + 1;
+
+      result = claimed.target === 'rekap'
+        ? await executeRekapEdit({ id: existing.id, mergedPayload: form, actorSession, writeToExcel, send: true, sendCount })
+        : await executeShiftEdit({ id: existing.id, target: claimed.target, waktu: existing.payload?.waktu, mergedPayload: form, actorSession, writeToExcel, send: true, sendCount });
+    } else {
+      result = claimed.target === 'rekap'
+        ? await executeRekapSubmit({ form, actorSession, actionLabel: 'SUBMIT_REKAP_ACC' })
+        : await executeShiftSubmit({ target: claimed.target, waktu: claimed.waktu, form, actorSession, actionLabel: 'SUBMIT_' + claimed.target.toUpperCase() + '_ACC' });
+    }
 
     await db.from('pending_approvals').update({
       cells_written: result.cellsWritten,
       wa_sent: result.waSent
     }).eq('id', id);
 
-    await logAudit(auth.session, 'ACC_ANOMALI', { target: claimed.target, tanggal: claimed.tanggal, submittedBy: claimed.submitted_by_username });
+    await logAudit(auth.session, 'ACC_ANOMALI', { target: claimed.target, tanggal: claimed.tanggal, submittedBy: claimed.submitted_by_username, edit: !!claimed.submission_id });
 
     return NextResponse.json({ ok: true, ...result });
   } catch (e) {

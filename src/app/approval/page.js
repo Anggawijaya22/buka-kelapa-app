@@ -159,6 +159,11 @@ export default function ApprovalPage() {
       {items.map(item => (
         <div key={item.id} className="card">
           <h2>{targetLabel(item)}</h2>
+          {item.submission_id && (
+            <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>
+              ✏️ Ini hasil EDIT data yang sudah pernah dikirim — kalau di-ACC, akan MENIMPA data yang sama (bukan data baru).
+            </p>
+          )}
           <p className="sub">📅 {item.tanggal} · diajukan oleh <b>{item.submitted_by_username}</b></p>
           {item.ef_wm_preview !== null && (
             <p style={{ fontSize: 14, marginBottom: 4 }}>EF WM diperkirakan: <b>{Number(item.ef_wm_preview).toFixed(4).replace('.', ',')}</b></p>

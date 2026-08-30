@@ -5,6 +5,7 @@ import { SHIFT_LABELS } from '@/lib/excel-map';
 import { triggerN8n } from '@/lib/n8n';
 import { checkCooldown, markSubmitted } from '@/lib/cooldown';
 import { getCooldownMinutes } from '@/lib/settings';
+import { MAX_SEND_COUNT } from '@/lib/limits';
 
 const APPROVER_ROLES = ['viewer', 'superadmin'];
 
@@ -50,8 +51,9 @@ export async function POST(req) {
   const auth = await requireAuth();
   if (auth.error) return NextResponse.json({ error: auth.error }, { status: auth.status });
 
-  const { target, waktu, form, efWmPreview, reason, catatan } = await req.json();
+  const { target, waktu, form, efWmPreview, reason, catatan, submissionId } = await req.json();
   const isRekap = target === 'rekap';
+  const isEdit = !!submissionId;
   if (!isRekap && !SHIFT_LABELS[target]) {
     return NextResponse.json({ error: 'Target tidak valid' }, { status: 400 });
   }
@@ -62,7 +64,23 @@ export async function POST(req) {
     return NextResponse.json({ error: 'Catatan wajib diisi kalau tetap mengirim data anomali' }, { status: 400 });
   }
 
-  if (isRekap) {
+  if (isEdit) {
+    // Mengedit record yang sudah ada lewat Monitoring — pakai aturan akses yang sama dengan
+    // api/monitoring PUT (admin_atas & superadmin boleh edit target apa saja, admin cuma shift sendiri).
+    const { data: existing, error: fetchErr } = await db.from('submissions').select('*').eq('id', submissionId).maybeSingle();
+    if (fetchErr) return NextResponse.json({ error: fetchErr.message }, { status: 500 });
+    if (!existing) return NextResponse.json({ error: 'Data yang diedit tidak ditemukan' }, { status: 404 });
+    if (!['admin', 'admin_atas', 'superadmin'].includes(auth.session.role)) {
+      return NextResponse.json({ error: 'Tidak punya akses' }, { status: 403 });
+    }
+    if (auth.session.role === 'admin' && (isRekap || existing.target !== auth.session.shift)) {
+      return NextResponse.json({ error: 'Anda hanya bisa edit data shift Anda sendiri' }, { status: 403 });
+    }
+    // admin_atas & superadmin boleh edit target apa saja (shiftA/B/C/rekap)
+    if (existing.status === 'sent' && existing.send_count >= MAX_SEND_COUNT && auth.session.role !== 'superadmin') {
+      return NextResponse.json({ error: `Data ini sudah dikirim ${MAX_SEND_COUNT}x dan terkunci. Hubungi Developer kalau perlu revisi lebih lanjut.` }, { status: 403 });
+    }
+  } else if (isRekap) {
     if (!['admin_atas', 'superadmin'].includes(auth.session.role)) {
       return NextResponse.json({ error: 'Hanya Admin Atas/Developer yang bisa input rekap harian' }, { status: 403 });
     }
@@ -93,6 +111,7 @@ export async function POST(req) {
     ef_wm_preview: efWmPreview ?? null,
     anomali_reason: reason || null,
     catatan: catatan.trim(),
+    submission_id: submissionId || null,
     submitted_by_id: auth.session.id,
     submitted_by_username: auth.session.username,
     status: 'pending'

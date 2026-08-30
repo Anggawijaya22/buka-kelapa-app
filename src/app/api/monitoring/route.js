@@ -5,9 +5,9 @@ import { todayIso } from '@/lib/date';
 import { executeShiftEdit, executeRekapEdit } from '@/lib/submitFlow';
 import { checkCooldown, markSubmitted } from '@/lib/cooldown';
 import { getCooldownMinutes } from '@/lib/settings';
+import { MAX_SEND_COUNT } from '@/lib/limits';
 
 const ALL_TARGETS = ['shiftA', 'shiftB', 'shiftC', 'rekap'];
-const MAX_SEND_COUNT = 3;
 
 // GET /api/monitoring?tanggal=YYYY-MM-DD  (default: hari ini)
 // Admin Shift  -> hanya data shift yang ditugaskan ke dirinya
