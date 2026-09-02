@@ -82,6 +82,20 @@ export async function writeCells(cellValueMap) {
   return results;
 }
 
+// ---------- Tulis banyak cell sekaligus, TERMASUK yang nilainya sengaja dikosongkan ("") ----------
+// Beda dari writeCells() di atas yang MELEWATI cell kosong (supaya submit sebagian data tidak
+// menghapus isi cell lain) — writeCellsForce() dipakai khusus untuk kasus yang memang SENGAJA
+// mau mengosongkan cell, misalnya tombol LIBUR PRODUKSI.
+export async function writeCellsForce(cellValueMap) {
+  const token = await getAccessToken();
+  const results = [];
+  for (const [cell, value] of Object.entries(cellValueMap)) {
+    await writeCell(token, cell, value ?? '');
+    results.push(cell);
+  }
+  return results;
+}
+
 // ---------- Download file Excel utuh (byte mentah, untuk tombol Download) ----------
 export async function downloadExcelFile() {
   const token = await getAccessToken();

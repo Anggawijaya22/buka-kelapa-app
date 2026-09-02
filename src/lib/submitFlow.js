@@ -1,7 +1,16 @@
-import { buildShiftCellMap, buildRekapCellMap } from './excel-map';
-import { writeCells } from './graph';
+import { buildShiftCellMap, buildRekapCellMap, buildShiftLiburCellMap } from './excel-map';
+import { writeCells, writeCellsForce } from './graph';
 import { triggerN8n } from './n8n';
 import { db, logAudit } from './db';
+
+// "DD/MM/YYYY" (format tampilan dipakai n8n) -> "DD/MM/YY" (format 2 digit tahun dipakai kolom
+// Tanggal di Excel, konsisten dengan toExcelDate() di form submit biasa).
+function toExcelYearShort(displayDate) {
+  const parts = String(displayDate).split('/');
+  if (parts.length !== 3) return displayDate;
+  const [d, m, y] = parts;
+  return `${d}/${m}/${y.slice(-2)}`;
+}
 
 // Eksekusi tulis Excel + trigger n8n untuk SHIFT.
 // actorSession = pemilik data (admin yang submit awal) — dipakai untuk submissions & audit log,
@@ -131,4 +140,20 @@ export async function executeRekapEdit({ id, mergedPayload, actorSession, writeT
 
   const n8n = await triggerN8n(process.env.N8N_WEBHOOK_REKAP, { tanggal: mergedPayload.tanggal });
   return { cellsWritten: written.length, waSent: n8n.ok, warn: n8n.warn || null, wroteToExcel: writeToExcel };
+}
+
+// Tombol LIBUR PRODUKSI (per shift saja — Rekap TIDAK ikut, sesuai keputusan: cukup shift dulu).
+// Mengosongkan semua cell data + PH Santan shift terkait di Excel (writeCellsForce, bukan writeCells,
+// karena string kosong di sini harus benar-benar ditulis), tapi kolom Tanggal tetap diupdate ke
+// tanggal hari ini supaya nanti API dashboard mengeluarkan JSON "tidak ada data" utk tanggal itu.
+// Header baris 4 SENGAJA tidak disentuh (tetap label shift/waktu terakhir yang pernah disubmit).
+export async function executeShiftLibur({ target, waktu, tanggalDisplay, actorSession }) {
+  const tanggalExcel = toExcelYearShort(tanggalDisplay);
+  const cellMap = buildShiftLiburCellMap(target, tanggalExcel);
+  const written = await writeCellsForce(cellMap);
+
+  const n8n = await triggerN8n(process.env.N8N_WEBHOOK_LIBUR, { target, waktu, tanggal: tanggalDisplay });
+  await logAudit(actorSession, 'KIRIM_LIBUR', { target, waktu, tanggal: tanggalDisplay, cellsWritten: written.length, clearedExcel: true });
+
+  return { cellsWritten: written.length, waSent: n8n.ok, warn: n8n.warn || null };
 }

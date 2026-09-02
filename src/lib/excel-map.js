@@ -86,6 +86,27 @@ export function buildShiftCellMap(target, form, waktu) {
   return map;
 }
 
+// Bangun map utk tombol LIBUR PRODUKSI (per shift) — kolom Tanggal DIUPDATE ke hari ini,
+// SEMUA field data + PH Santan lainnya DIKOSONGKAN ("") supaya tidak ada data lama shift ini
+// yang nyangkut kelihatan seolah masih berlaku. Header baris 4 SENGAJA tidak disentuh.
+// Dipakai lewat writeCellsForce() (bukan writeCells()) karena string kosong di sini harus
+// benar-benar ditulis, bukan dilewati.
+export function buildShiftLiburCellMap(target, tanggalExcel) {
+  const col = SHIFT_COLS[target];
+  const labelCol = LABEL_COLS[target];
+  if (!col) throw new Error('Target shift tidak dikenal: ' + target);
+
+  const map = {};
+  for (const [field, row] of Object.entries(SHIFT_ROWS)) {
+    map[`${col}${row}`] = field === 'tanggal' ? tanggalExcel : '';
+  }
+  for (const ph of PH_ROWS) {
+    map[`${labelCol}${ph.labelRow}`] = '';
+    map[`${labelCol}${ph.valueRow}`] = '';
+  }
+  return map;
+}
+
 // Field manual rekap harian → row Excel (kolom D)
 const REKAP_ROWS = {
   tanggal: 37,
