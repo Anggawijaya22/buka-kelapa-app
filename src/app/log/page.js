@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import Nav from '@/lib/Nav';
+import { formatIsoDisplay } from '@/lib/dateDisplay';
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10);
@@ -128,6 +129,11 @@ export default function LogPage() {
       <div className="card">
         <label>Tanggal</label>
         <input type="date" value={tanggal} max={todayStr()} onChange={e => setTanggal(e.target.value)} />
+        {tanggal && (
+          <small style={{ display: 'block', marginTop: 4, color: 'var(--muted, #666)' }}>
+            📅 {formatIsoDisplay(tanggal)} (format Indonesia: DD/MM/YYYY)
+          </small>
+        )}
         {tanggal && (
           <button type="button" className="secondary" style={{ width: 'auto', padding: '6px 14px', marginTop: 8 }} onClick={() => setTanggal('')}>
             Tampilkan Semua Tanggal

@@ -133,7 +133,7 @@ export default function InputPage() {
 
   function kirimLibur() {
     if (cooldown.remaining > 0) return;
-    if (!confirm(`Kirim notifikasi LIBUR PRODUKSI untuk Shift ${shift.slice(-1)} (${waktu.toUpperCase()})?\n\nPesan akan langsung terkirim ke WhatsApp Bos.`)) return;
+    if (!confirm(`Kirim notifikasi LIBUR PRODUKSI untuk Shift ${shift.slice(-1)} (${waktu.toUpperCase()})?\n\nTanggal: ${todayDisplay()}\nPesan akan langsung terkirim ke WhatsApp Bos, dan data Excel Shift ${shift.slice(-1)} akan DIKOSONGKAN.`)) return;
     doKirimLibur();
   }
 

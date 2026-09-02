@@ -8,6 +8,7 @@ import useResultModal from '@/lib/useResultModal';
 import useConfirm from '@/lib/useConfirm';
 import useAnomaliConfirm from '@/lib/useAnomaliConfirm';
 import { detectShiftAnomali, detectRekapAnomali } from '@/lib/anomaliDetect';
+import { formatIsoDisplay } from '@/lib/dateDisplay';
 
 const TARGET_LABELS = { shiftA: 'Shift A', shiftB: 'Shift B', shiftC: 'Shift C', rekap: '📋 Rekap Harian' };
 
@@ -323,6 +324,9 @@ export default function MonitoringPage() {
       <div className="card">
         <label>Tanggal</label>
         <input type="date" value={tanggal} max={todayStr()} onChange={e => setTanggal(e.target.value)} />
+        <small style={{ display: 'block', marginTop: 4, color: 'var(--muted, #666)' }}>
+          📅 {formatIsoDisplay(tanggal)} (format Indonesia: DD/MM/YYYY)
+        </small>
       </div>
 
       {loading && <p>Memuat...</p>}

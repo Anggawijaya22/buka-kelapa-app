@@ -9,6 +9,7 @@ import useResultModal from '@/lib/useResultModal';
 import useConfirm from '@/lib/useConfirm';
 import useAnomaliConfirm from '@/lib/useAnomaliConfirm';
 import { detectShiftAnomali, detectRekapAnomali } from '@/lib/anomaliDetect';
+import { formatIsoDisplay } from '@/lib/dateDisplay';
 
 const WAKTU_EMOJI = { pagi: '🌅', siang: '☀️', malam: '🌙' };
 
@@ -231,6 +232,11 @@ function FormInner() {
         <div className="card">
           <label>Tanggal *</label>
           <input type="date" value={form.tanggal} onChange={e => set('tanggal', e.target.value)} required />
+          {/* Widget kalender bawaan browser ikut locale device (bisa tampil mm/dd/yyyy di HP
+              ber-bahasa Inggris) — label ini penegas format Indonesia yang sebenarnya tersimpan. */}
+          <small style={{ display: 'block', marginTop: 4, color: 'var(--muted, #666)' }}>
+            📅 {formatIsoDisplay(form.tanggal)} (format Indonesia: DD/MM/YYYY)
+          </small>
         </div>
 
         <ProductionFormFields isRekap={isRekap} form={form} set={set} ph={ph} setPhField={setPhField} errors={errors} />
