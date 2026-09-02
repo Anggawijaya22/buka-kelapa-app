@@ -3,13 +3,15 @@ import { writeCells, writeCellsForce } from './graph';
 import { triggerN8n } from './n8n';
 import { db, logAudit } from './db';
 
-// "DD/MM/YYYY" (format tampilan dipakai n8n) -> "DD/MM/YY" (format 2 digit tahun dipakai kolom
-// Tanggal di Excel, konsisten dengan toExcelDate() di form submit biasa).
-function toExcelYearShort(displayDate) {
+// "DD/MM/YYYY" (format tampilan dipakai n8n, DIBIARKAN APA ADANYA utk payload n8n) -> "YYYY-MM-DD"
+// (ISO, dipakai KHUSUS utk cell Tanggal Excel). ISO dipilih (bukan "DD/MM/YY") supaya Excel tidak
+// salah tafsir jadi MM/DD kalau locale workbook/session Graph API-nya en-US — mis. "02/09/26" bisa
+// terbaca "9 Februari" alih-alih "2 September". ISO ("2026-09-02") tidak ambigu di locale mana pun.
+function toIsoFromDisplay(displayDate) {
   const parts = String(displayDate).split('/');
   if (parts.length !== 3) return displayDate;
   const [d, m, y] = parts;
-  return `${d}/${m}/${y.slice(-2)}`;
+  return `${y}-${m}-${d}`;
 }
 
 // Eksekusi tulis Excel + trigger n8n untuk SHIFT.
@@ -148,8 +150,8 @@ export async function executeRekapEdit({ id, mergedPayload, actorSession, writeT
 // tanggal hari ini supaya nanti API dashboard mengeluarkan JSON "tidak ada data" utk tanggal itu.
 // Header baris 4 SENGAJA tidak disentuh (tetap label shift/waktu terakhir yang pernah disubmit).
 export async function executeShiftLibur({ target, waktu, tanggalDisplay, actorSession }) {
-  const tanggalExcel = toExcelYearShort(tanggalDisplay);
-  const cellMap = buildShiftLiburCellMap(target, tanggalExcel);
+  const tanggalIso = toIsoFromDisplay(tanggalDisplay);
+  const cellMap = buildShiftLiburCellMap(target, tanggalIso);
   const written = await writeCellsForce(cellMap);
 
   const n8n = await triggerN8n(process.env.N8N_WEBHOOK_LIBUR, { target, waktu, tanggal: tanggalDisplay });

@@ -60,9 +60,13 @@ export function buildShiftCellMap(target, form, waktu) {
     map[`${labelCol}${HEADER_ROW}`] = `Shift ${target.slice(-1)} (${WAKTU_LABELS[waktu]})`;
   }
 
-  // Field utama
+  // Field utama. Khusus 'tanggal': tulis format ISO "YYYY-MM-DD" (form.tanggalIso), BUKAN
+  // "DD/MM/YY" (form.tanggal) — ISO tidak ambigu di mata Excel apa pun locale-nya, sedangkan
+  // "DD/MM/YY" bisa salah dibaca jadi MM/DD (mis. "02/09/26" dibaca 9 Februari, bukan 2 September)
+  // kalau locale workbook/session Graph API-nya en-US. Lihat juga buildRekapCellMap &
+  // buildShiftLiburCellMap yang punya masalah sama.
   for (const [field, row] of Object.entries(SHIFT_ROWS)) {
-    const v = form[field];
+    const v = field === 'tanggal' ? (form.tanggalIso || form[field]) : form[field];
     if (v !== undefined && v !== null && v !== '') {
       map[`${col}${row}`] = v;
     }
@@ -91,14 +95,15 @@ export function buildShiftCellMap(target, form, waktu) {
 // yang nyangkut kelihatan seolah masih berlaku. Header baris 4 SENGAJA tidak disentuh.
 // Dipakai lewat writeCellsForce() (bukan writeCells()) karena string kosong di sini harus
 // benar-benar ditulis, bukan dilewati.
-export function buildShiftLiburCellMap(target, tanggalExcel) {
+// tanggalIso: format ISO "YYYY-MM-DD" — lihat catatan ambiguitas tanggal di buildShiftCellMap.
+export function buildShiftLiburCellMap(target, tanggalIso) {
   const col = SHIFT_COLS[target];
   const labelCol = LABEL_COLS[target];
   if (!col) throw new Error('Target shift tidak dikenal: ' + target);
 
   const map = {};
   for (const [field, row] of Object.entries(SHIFT_ROWS)) {
-    map[`${col}${row}`] = field === 'tanggal' ? tanggalExcel : '';
+    map[`${col}${row}`] = field === 'tanggal' ? tanggalIso : '';
   }
   for (const ph of PH_ROWS) {
     map[`${labelCol}${ph.labelRow}`] = '';
@@ -127,7 +132,8 @@ const REKAP_SISA_CELL = 'E61';
 export function buildRekapCellMap(form) {
   const map = {};
   for (const [field, row] of Object.entries(REKAP_ROWS)) {
-    const v = form[field];
+    // Khusus 'tanggal': pakai ISO (tidak ambigu) — lihat catatan di buildShiftCellMap.
+    const v = field === 'tanggal' ? (form.tanggalIso || form[field]) : form[field];
     if (v !== undefined && v !== null && v !== '') {
       map[`D${row}`] = v;
     }
