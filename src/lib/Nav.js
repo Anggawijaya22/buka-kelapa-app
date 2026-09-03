@@ -15,6 +15,11 @@ export default function Nav() {
 
   useEffect(() => {
     setRole(sessionStorage.getItem('bk_role') || '');
+    // Tandai body supaya CSS bisa geser .container ke kanan sidebar khusus di halaman yang
+    // punya Nav (bukan halaman login, yang tidak merender <Nav/> sama sekali) — lihat
+    // "body.has-sidebar" di globals.css.
+    document.body.classList.add('has-sidebar');
+    return () => document.body.classList.remove('has-sidebar');
   }, []);
 
   async function logout() {
@@ -72,20 +77,11 @@ export default function Nav() {
 
   return (
     <>
-      <button
-        type="button"
-        onClick={logout}
-        style={{
-          position: 'fixed', top: 12, right: 12, zIndex: 200, width: 'auto',
-          padding: '8px 16px', margin: 0, borderRadius: 20, border: 'none',
-          background: 'var(--danger)', color: '#fff', fontSize: 13, fontWeight: 600,
-          boxShadow: '0 2px 6px rgba(0,0,0,0.18)'
-        }}
-      >
+      <button type="button" onClick={logout} className="btn-logout">
         🚪 Keluar
       </button>
 
-      <div className="nav" style={{ paddingRight: 90 }}>
+      <div className="nav">
         {links.filter(l => l.show).map(l => (
           <a key={l.href} href={l.href} className={pathname.startsWith(l.href) ? 'active' : ''}>{l.label}</a>
         ))}

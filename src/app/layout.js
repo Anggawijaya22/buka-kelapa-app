@@ -1,4 +1,5 @@
 import './globals.css';
+import BackgroundLayer from '@/lib/BackgroundLayer';
 
 export const metadata = {
   title: 'Buka Kelapa App',
@@ -34,6 +35,7 @@ export default function RootLayout({ children }) {
         `}} />
       </head>
       <body>
+        <BackgroundLayer />
         {children}
         <script dangerouslySetInnerHTML={{ __html: `
           if ('serviceWorker' in navigator) {

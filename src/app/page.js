@@ -28,9 +28,9 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="container" style={{ paddingTop: 60 }}>
-      <div className="card">
-        <img src="/icon-192.png" alt="Buka Kelapa App" width={72} height={72} style={{ borderRadius: 16, marginBottom: 12 }} />
+    <div className="login-wrap">
+      <div className="login-card">
+        <img src="/icon-192.png" alt="Buka Kelapa App" width={96} height={96} style={{ borderRadius: 22, marginBottom: 16 }} />
         <h1>Buka Kelapa App</h1>
         <p className="sub">Login untuk input laporan produksi</p>
         <form onSubmit={handleLogin}>
