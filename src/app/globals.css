@@ -148,7 +148,11 @@ th { color: var(--muted); font-weight: 600; font-size: 0.8rem; }
   body.has-sidebar .nav a {
     border-radius: 12px; padding: 12px 16px; font-size: 0.95rem;
   }
-  body.has-sidebar .container { margin-left: 232px; max-width: 820px; padding: 90px 32px 32px; }
+  /* Offset dipasang di body (padding), BUKAN margin-left di .container — supaya .container yang
+     sudah "margin: 0 auto" dari rule dasar bisa presisi di TENGAH sisa ruang setelah sidebar,
+     bukan cuma nempel rata kiri dengan sisa ruang kosong menumpuk di kanan. */
+  body.has-sidebar { padding-left: 232px; }
+  body.has-sidebar .container { margin: 0 auto; max-width: 820px; padding: 90px 32px 32px; }
 }
 
 /* ===================== MOBILE: nav tetap seperti semula, font diperbesar ===================== */
