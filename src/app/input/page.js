@@ -5,6 +5,7 @@ import Nav from '@/lib/Nav';
 import CooldownNotice from '@/lib/CooldownNotice';
 import useCooldown from '@/lib/useCooldown';
 import useResultModal from '@/lib/useResultModal';
+import { IconSunrise, IconSun, IconMoon, IconEdit, IconBan, IconFileText, IconClock, IconXCircle } from '@/lib/icons';
 
 const DISMISS_KEY = 'bk_dismissed_approvals';
 
@@ -31,6 +32,17 @@ function saveDismissed(set) {
   try {
     localStorage.setItem(DISMISS_KEY, JSON.stringify([...set]));
   } catch {}
+}
+
+// Badge angka bulat pengganti emoji nomor urut (1️⃣2️⃣3️⃣) di judul tiap langkah.
+function StepBadge({ n }) {
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+      width: 24, height: 24, borderRadius: '50%', background: 'var(--primary)',
+      color: '#fff', fontSize: '0.8rem', fontWeight: 700, marginRight: 8, verticalAlign: '-5px'
+    }}>{n}</span>
+  );
 }
 
 function PengajuanSaya() {
@@ -68,11 +80,11 @@ function PengajuanSaya() {
       {items.map(it => (
         <div key={it.id} className="card" style={{ borderColor: it.status === 'pending' ? 'var(--warn)' : 'var(--danger)' }}>
           {it.status === 'pending' && (
-            <p style={{ fontSize: 14 }}>⏳ <b>{targetLabelSingkat(it)}</b> ({it.tanggal}) sedang menunggu approval Viewer karena ada anomali.</p>
+            <p style={{ fontSize: 14 }}><IconClock size={16} style={{ marginRight: 6 }} /><b>{targetLabelSingkat(it)}</b> ({it.tanggal}) sedang menunggu approval Viewer karena ada anomali.</p>
           )}
           {it.status === 'rejected' && (
             <>
-              <p style={{ fontSize: 14, marginBottom: 8 }}>❌ <b>{targetLabelSingkat(it)}</b> ({it.tanggal}) di-<b>reject</b> oleh {it.resolved_by_username}. Mohon cek kembali dan kirim ulang.</p>
+              <p style={{ fontSize: 14, marginBottom: 8 }}><IconXCircle size={16} style={{ marginRight: 6 }} /><b>{targetLabelSingkat(it)}</b> ({it.tanggal}) di-<b>reject</b> oleh {it.resolved_by_username}. Mohon cek kembali dan kirim ulang.</p>
               <button type="button" className="secondary" onClick={() => tutup(it.id)}>Mengerti, tutup</button>
             </>
           )}
@@ -106,7 +118,7 @@ export default function InputPage() {
   const cooldown = useCooldown();
   const { modal: resultModal, showSuccess, showError } = useResultModal();
 
-  const WAKTU_EMOJI = { pagi: '🌅', siang: '☀️', malam: '🌙' };
+  const WAKTU_ICON = { pagi: IconSunrise, siang: IconSun, malam: IconMoon };
 
   function goToForm() {
     router.push(`/input/form?target=${shift}&waktu=${waktu}`);
@@ -179,7 +191,7 @@ export default function InputPage() {
 
       {shiftOptions.length > 0 && (
         <div className="card">
-          <h2>1️⃣ Pilih Shift</h2>
+          <h2><StepBadge n={1} />Pilih Shift</h2>
           <div className="grid3">
             {shiftOptions.map(s => (
               <button key={s} type="button"
@@ -195,27 +207,32 @@ export default function InputPage() {
 
       {shift && (
         <div className="card">
-          <h2>2️⃣ Pilih Waktu</h2>
+          <h2><StepBadge n={2} />Pilih Waktu</h2>
           <div className="grid3">
-            {['pagi', 'siang', 'malam'].map(w => (
-              <button key={w} type="button"
-                className={waktu === w ? '' : 'secondary'}
-                style={{ marginTop: 8 }}
-                onClick={() => setWaktu(w)}>
-                {WAKTU_EMOJI[w]} {w.charAt(0).toUpperCase() + w.slice(1)}
-              </button>
-            ))}
+            {['pagi', 'siang', 'malam'].map(w => {
+              const WaktuIcon = WAKTU_ICON[w];
+              return (
+                <button key={w} type="button"
+                  className={waktu === w ? '' : 'secondary'}
+                  style={{ marginTop: 8 }}
+                  onClick={() => setWaktu(w)}>
+                  <WaktuIcon size={16} style={{ marginRight: 6 }} />{w.charAt(0).toUpperCase() + w.slice(1)}
+                </button>
+              );
+            })}
           </div>
         </div>
       )}
 
       {shift && waktu && (
         <div className="card">
-          <h2>3️⃣ Lanjut</h2>
-          <p className="sub">Shift {shift.slice(-1)} — {WAKTU_EMOJI[waktu]} {waktu.toUpperCase()}</p>
-          <button onClick={goToForm}>📝 Isi Data Produksi</button>
+          <h2><StepBadge n={3} />Lanjut</h2>
+          <p className="sub" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            Shift {shift.slice(-1)} — {(() => { const WaktuIcon = WAKTU_ICON[waktu]; return <WaktuIcon size={14} />; })()} {waktu.toUpperCase()}
+          </p>
+          <button onClick={goToForm}><IconEdit size={16} style={{ marginRight: 6 }} />Isi Data Produksi</button>
           <button className="danger" disabled={loading || cooldown.remaining > 0} onClick={kirimLibur}>
-            {loading ? 'Mengirim...' : '⛔ LIBUR PRODUKSI (kirim notif)'}
+            {loading ? 'Mengirim...' : (<><IconBan size={16} style={{ marginRight: 6 }} />LIBUR PRODUKSI (kirim notif)</>)}
           </button>
           <CooldownNotice seconds={cooldown.remaining} />
         </div>
@@ -223,13 +240,13 @@ export default function InputPage() {
 
       {role !== 'admin' && (
         <div className="card">
-          <h2>📋 Rekap Harian</h2>
+          <h2><IconFileText size={18} style={{ marginRight: 6 }} />Rekap Harian</h2>
           <p className="sub">Rekap gabungan semua shift — kirim manual</p>
           <button className="secondary" onClick={() => router.push('/input/form?target=rekap')}>
-            📝 Isi Rekap Harian
+            <IconEdit size={16} style={{ marginRight: 6 }} />Isi Rekap Harian
           </button>
           <button className="danger" disabled={loadingRekapLibur || cooldown.remaining > 0} onClick={kirimLiburRekap} style={{ marginTop: 8 }}>
-            {loadingRekapLibur ? 'Mengirim...' : '⛔ LIBUR (Ketiga Shift) — kirim notif'}
+            {loadingRekapLibur ? 'Mengirim...' : (<><IconBan size={16} style={{ marginRight: 6 }} />LIBUR (Ketiga Shift) — kirim notif</>)}
           </button>
           <CooldownNotice seconds={cooldown.remaining} />
         </div>

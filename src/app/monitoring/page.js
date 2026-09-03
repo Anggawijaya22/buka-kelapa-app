@@ -9,6 +9,8 @@ import useConfirm from '@/lib/useConfirm';
 import useAnomaliConfirm from '@/lib/useAnomaliConfirm';
 import { detectShiftAnomali, detectRekapAnomali } from '@/lib/anomaliDetect';
 import { formatIsoDisplay } from '@/lib/dateDisplay';
+import useDownloadExcel from '@/lib/useDownloadExcel';
+import { IconDownload } from '@/lib/icons';
 
 const TARGET_LABELS = { shiftA: 'Shift A', shiftB: 'Shift B', shiftC: 'Shift C', rekap: '📋 Rekap Harian' };
 
@@ -280,6 +282,7 @@ export default function MonitoringPage() {
   const [loading, setLoading] = useState(true);
   const [forbidden, setForbidden] = useState(false);
   const cooldown = useCooldown();
+  const { modal: downloadModal, askDownload } = useDownloadExcel();
 
   useEffect(() => {
     setRole(sessionStorage.getItem('bk_role') || '');
@@ -314,6 +317,7 @@ export default function MonitoringPage() {
   return (
     <div className="container">
       <Nav />
+      {downloadModal}
       <h1>Monitoring</h1>
       <p className="sub">
         {role === 'admin'
@@ -327,6 +331,9 @@ export default function MonitoringPage() {
         <small style={{ display: 'block', marginTop: 4, color: 'var(--muted, #666)' }}>
           📅 {formatIsoDisplay(tanggal)} (format Indonesia: DD/MM/YYYY)
         </small>
+        <button type="button" className="secondary" onClick={askDownload}>
+          <IconDownload size={16} style={{ marginRight: 6 }} />Download Excel
+        </button>
       </div>
 
       {loading && <p>Memuat...</p>}

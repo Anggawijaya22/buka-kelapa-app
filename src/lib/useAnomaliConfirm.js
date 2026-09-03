@@ -1,5 +1,6 @@
 'use client';
 import { useState } from 'react';
+import { IconAlertTriangle, IconCheckCircle, IconEdit } from './icons';
 
 // Modal konfirmasi anomali — dipakai berbasis Promise (mirip window.confirm tapi custom 2 tombol).
 // Catatan WAJIB diisi kalau user pilih "Tetap Kirim" — supaya viewer/developer tahu alasan admin
@@ -27,7 +28,7 @@ export default function useAnomaliConfirm() {
       display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16
     }}>
       <div className="card" style={{ maxWidth: 420, width: '100%', margin: 0 }}>
-        <h2 style={{ color: 'var(--warn)' }}>⚠️ Anomali Terdeteksi</h2>
+        <h2 style={{ color: 'var(--warn)' }}><IconAlertTriangle size={18} style={{ marginRight: 6 }} />Anomali Terdeteksi</h2>
         <p style={{ whiteSpace: 'pre-line', fontSize: 14, marginBottom: 4 }}>{state.message}</p>
         <label>Catatan (wajib diisi kalau tetap kirim)</label>
         <textarea
@@ -37,8 +38,8 @@ export default function useAnomaliConfirm() {
           placeholder="Contoh: sudah dicek ulang, memang segini hasilnya karena..."
           style={{ width: '100%', padding: 12, border: '1px solid var(--border)', borderRadius: 8, fontSize: 15, fontFamily: 'inherit', resize: 'vertical' }}
         />
-        <button disabled={catatanKosong} onClick={() => handle({ confirmed: true, catatan: catatan.trim() })}>✅ Tetap Kirim</button>
-        <button type="button" className="secondary" onClick={() => handle({ confirmed: false })}>✏️ Revisi Data</button>
+        <button disabled={catatanKosong} onClick={() => handle({ confirmed: true, catatan: catatan.trim() })}><IconCheckCircle size={16} style={{ marginRight: 6 }} />Tetap Kirim</button>
+        <button type="button" className="secondary" onClick={() => handle({ confirmed: false })}><IconEdit size={16} style={{ marginRight: 6 }} />Revisi Data</button>
       </div>
     </div>
   ) : null;

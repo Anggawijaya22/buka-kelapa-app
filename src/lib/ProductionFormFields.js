@@ -1,5 +1,6 @@
 'use client';
 import KgInput from '@/lib/KgInput';
+import { IconAlertTriangle } from '@/lib/icons';
 
 const PH_LINES = ['A', 'B', 'C', 'D', 'E'];
 
@@ -70,7 +71,7 @@ function errClass(key, errors) {
 }
 
 function ErrMark({ show }) {
-  return show ? <span style={{ color: '#dc2626' }}> ⚠️</span> : null;
+  return show ? <IconAlertTriangle size={13} style={{ color: '#dc2626', marginLeft: 4 }} /> : null;
 }
 
 // Field form Shift / Rekap — dipakai bersama oleh /input/form (input baru)

@@ -10,8 +10,9 @@ import useConfirm from '@/lib/useConfirm';
 import useAnomaliConfirm from '@/lib/useAnomaliConfirm';
 import { detectShiftAnomali, detectRekapAnomali } from '@/lib/anomaliDetect';
 import { formatIsoDisplay } from '@/lib/dateDisplay';
+import { IconSunrise, IconSun, IconMoon, IconFileText, IconRefreshCw, IconCalendar, IconAlertTriangle, IconSave, IconSend } from '@/lib/icons';
 
-const WAKTU_EMOJI = { pagi: '🌅', siang: '☀️', malam: '🌙' };
+const WAKTU_ICON = { pagi: IconSunrise, siang: IconSun, malam: IconMoon };
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10);
@@ -116,7 +117,7 @@ function FormInner() {
     const { valid, errors: newErrors } = validateProductionForm(isRekap, form, ph);
     setErrors(newErrors);
     if (!valid) {
-      setMsg({ type: 'error', text: '⚠️ Data belum lengkap. Isi semua kolom yang ditandai merah (boleh isi 0 kalau memang tidak ada nilainya).' });
+      setMsg({ type: 'error', text: 'Data belum lengkap. Isi semua kolom yang ditandai merah (boleh isi 0 kalau memang tidak ada nilainya).' });
       return;
     }
     setMsg({ type: '', text: '' });
@@ -152,8 +153,8 @@ function FormInner() {
         return;
       }
       if (data.cooldownSeconds) cooldown.start(data.cooldownSeconds);
-      let anomaliText = '📨 Data anomali terkirim ke Viewer untuk persetujuan. Excel belum diupdate sampai di-ACC.';
-      anomaliText += data.waSent ? ' Notifikasi WA ke Viewer terkirim 📱' : ' (Notifikasi WA gagal terkirim, tapi tetap bisa dilihat Viewer di app)';
+      let anomaliText = 'Data anomali terkirim ke Viewer untuk persetujuan. Excel belum diupdate sampai di-ACC.';
+      anomaliText += data.waSent ? ' Notifikasi WA ke Viewer terkirim.' : ' (Notifikasi WA gagal terkirim, tapi tetap bisa dilihat Viewer di app)';
       clearDraft();
       showSuccess(anomaliText, () => router.push('/input'));
       return;
@@ -184,7 +185,7 @@ function FormInner() {
     }
     if (data.cooldownSeconds) cooldown.start(data.cooldownSeconds);
     let text = `${data.cellsWritten} cell tersimpan ke Excel.`;
-    text += data.waSent ? ' Laporan WA sedang dikirim 📨' : ` ⚠️ ${data.warn || 'WA tidak terkirim'}`;
+    text += data.waSent ? ' Laporan WA sedang dikirim.' : ` Catatan: ${data.warn || 'WA tidak terkirim'}`;
     clearDraft();
     showSuccess(text, () => router.push('/input'));
   }
@@ -196,16 +197,17 @@ function FormInner() {
     const { valid, errors: newErrors } = validateProductionForm(isRekap, form, ph);
     setErrors(newErrors);
     if (!valid) {
-      setMsg({ type: 'error', text: '⚠️ Data belum lengkap. Isi semua kolom yang ditandai merah (boleh isi 0 kalau memang tidak ada nilainya).' });
+      setMsg({ type: 'error', text: 'Data belum lengkap. Isi semua kolom yang ditandai merah (boleh isi 0 kalau memang tidak ada nilainya).' });
       return;
     }
     setMsg({ type: '', text: '' });
     doSubmit();
   }
 
-  const title = isRekap
-    ? '📋 Rekap Harian'
-    : `${WAKTU_EMOJI[waktu] || ''} Shift ${(target || '').slice(-1)} (${waktu.toUpperCase()})`;
+  const TitleIcon = isRekap ? IconFileText : (WAKTU_ICON[waktu] || null);
+  const titleText = isRekap
+    ? 'Rekap Harian'
+    : `Shift ${(target || '').slice(-1)} (${waktu.toUpperCase()})`;
 
   if (!target) return <div className="container"><p>Target tidak valid</p></div>;
 
@@ -216,10 +218,10 @@ function FormInner() {
       {resultModal}
       {confirmModal}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-        <h1>{title}</h1>
+        <h1>{TitleIcon && <TitleIcon size={22} style={{ marginRight: 8 }} />}{titleText}</h1>
         {hasDraft && (
           <button type="button" className="secondary" style={{ width: 'auto', padding: '6px 14px', marginTop: 0 }} onClick={restoreDraft}>
-            🔄 Refresh
+            <IconRefreshCw size={14} style={{ marginRight: 6 }} />Refresh
           </button>
         )}
       </div>
@@ -234,21 +236,26 @@ function FormInner() {
           <input type="date" value={form.tanggal} onChange={e => set('tanggal', e.target.value)} required />
           {/* Widget kalender bawaan browser ikut locale device (bisa tampil mm/dd/yyyy di HP
               ber-bahasa Inggris) — label ini penegas format Indonesia yang sebenarnya tersimpan. */}
-          <small style={{ display: 'block', marginTop: 4, color: 'var(--muted, #666)' }}>
-            📅 {formatIsoDisplay(form.tanggal)} (format Indonesia: DD/MM/YYYY)
+          <small style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, color: 'var(--muted, #666)' }}>
+            <IconCalendar size={14} />{formatIsoDisplay(form.tanggal)} (format Indonesia: DD/MM/YYYY)
           </small>
         </div>
 
         <ProductionFormFields isRekap={isRekap} form={form} set={set} ph={ph} setPhField={setPhField} errors={errors} />
 
-        {msg.text && <p className={msg.type}>{msg.text}</p>}
+        {msg.text && (
+          <p className={msg.type}>
+            {msg.type === 'error' && <IconAlertTriangle size={14} style={{ marginRight: 6 }} />}
+            {msg.text}
+          </p>
+        )}
         <CooldownNotice seconds={cooldown.remaining} />
         <button type="button" className="secondary" disabled={savingDraft} onClick={handleSimpan}>
-          {savingDraft ? 'Menyimpan...' : '💾 Simpan'}
+          {savingDraft ? 'Menyimpan...' : (<><IconSave size={16} style={{ marginRight: 6 }} />Simpan</>)}
         </button>
         <button type="button" className="secondary" onClick={() => router.push('/input')}>← Kembali</button>
         <button disabled={loading || cooldown.remaining > 0}>
-          {loading ? 'Mengirim...' : '📤 Kirim Data'}
+          {loading ? 'Mengirim...' : (<><IconSend size={16} style={{ marginRight: 6 }} />Kirim Data</>)}
         </button>
       </form>
     </div>

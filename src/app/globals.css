@@ -75,6 +75,7 @@ button.danger { background: var(--danger); }
 /* ===== Navigasi: pill horizontal di mobile, sidebar kiri di desktop (lihat media query bawah) ===== */
 .nav { display: flex; gap: 10px; margin-bottom: 18px; flex-wrap: wrap; }
 .nav a {
+  display: inline-flex; align-items: center; gap: 8px;
   padding: 10px 16px;
   background: var(--card);
   backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
@@ -105,6 +106,7 @@ th { color: var(--muted); font-weight: 600; font-size: 0.8rem; }
 /* ===== Tombol Keluar (fixed, pojok kanan atas) ===== */
 .btn-logout {
   position: fixed; top: 16px; right: 16px; z-index: 200; width: auto;
+  display: inline-flex; align-items: center;
   padding: 12px 22px; margin: 0; border-radius: 24px; border: none;
   background: var(--danger); color: #fff; font-size: 0.95rem; font-weight: 700;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22);

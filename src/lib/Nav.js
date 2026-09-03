@@ -1,17 +1,12 @@
 'use client';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-
-const OVERLAY_STYLE = {
-  position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
-  display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16
-};
+import { IconHome, IconEdit, IconActivity, IconAlertTriangle, IconSettings, IconClipboard, IconLogOut } from './icons';
 
 export default function Nav() {
   const pathname = usePathname();
   const router = useRouter();
   const [role, setRole] = useState('');
-  const [downloadState, setDownloadState] = useState(null); // null | 'confirm' | 'downloading'
 
   useEffect(() => {
     setRole(sessionStorage.getItem('bk_role') || '');
@@ -28,35 +23,6 @@ export default function Nav() {
     router.push('/');
   }
 
-  async function doDownload() {
-    setDownloadState('downloading');
-    try {
-      const res = await fetch('/api/excel/download');
-      if (!res.ok) {
-        const d = await res.json().catch(() => ({}));
-        alert(d.error || 'Gagal download file Excel');
-        return;
-      }
-      const blob = await res.blob();
-      const disposition = res.headers.get('content-disposition') || '';
-      const match = disposition.match(/filename="?([^"]+)"?/);
-      const filename = match ? match[1] : 'Laporan-Produksi.xlsx';
-
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-    } catch (e) {
-      alert('Gagal download file Excel: ' + e.message);
-    } finally {
-      setDownloadState(null);
-    }
-  }
-
   const isSuper = role === 'superadmin';
   const isViewer = role === 'viewer';
   const isAdminShift = role === 'admin';
@@ -65,48 +31,31 @@ export default function Nav() {
   // admin (admin shift): Input Data (shift) + Monitoring (shift sendiri) + Pengaturan
   // admin_atas (admin atas): Input Data (rekap harian) + Monitoring (semua shift + rekap) + Pengaturan
   // viewer: hanya Approval + Pengaturan
-
+  // Urutan sengaja: Pengaturan SELALU paling bawah (satu-satunya menu yang tampil di semua role).
+  // Download Excel dipindah ke dalam menu Monitoring (lihat useDownloadExcel.js), tidak lagi di sini.
   const links = [
-    { href: '/dashboard',    label: 'Dashboard',      show: isSuper },
-    { href: '/input',        label: 'Input Data',     show: isAdminShift || isAdminAtas || isSuper },
-    { href: '/monitoring',   label: 'Monitoring',     show: isAdminShift || isAdminAtas || isSuper },
-    { href: '/approval',     label: '⚠️ Approval',    show: isViewer || isSuper },
-    { href: '/pengaturan',   label: '⚙️ Pengaturan',  show: true },
-    { href: '/log',          label: '📋 Log',         show: isSuper },
+    { href: '/dashboard',    label: 'Dashboard',    icon: IconHome,          show: isSuper },
+    { href: '/input',        label: 'Input Data',   icon: IconEdit,          show: isAdminShift || isAdminAtas || isSuper },
+    { href: '/monitoring',   label: 'Monitoring',   icon: IconActivity,      show: isAdminShift || isAdminAtas || isSuper },
+    { href: '/approval',     label: 'Approval',     icon: IconAlertTriangle, show: isViewer || isSuper },
+    { href: '/log',          label: 'Log',          icon: IconClipboard,     show: isSuper },
+    { href: '/pengaturan',   label: 'Pengaturan',   icon: IconSettings,      show: true },
   ];
 
   return (
     <>
       <button type="button" onClick={logout} className="btn-logout">
-        🚪 Keluar
+        <IconLogOut size={18} style={{ marginRight: 8 }} />Keluar
       </button>
 
       <div className="nav">
         {links.filter(l => l.show).map(l => (
-          <a key={l.href} href={l.href} className={pathname.startsWith(l.href) ? 'active' : ''}>{l.label}</a>
+          <a key={l.href} href={l.href} className={pathname.startsWith(l.href) ? 'active' : ''}>
+            <l.icon size={18} />
+            <span>{l.label}</span>
+          </a>
         ))}
-        <a href="#" onClick={e => { e.preventDefault(); setDownloadState('confirm'); }}>⬇️ Download Excel</a>
       </div>
-
-      {downloadState === 'confirm' && (
-        <div style={OVERLAY_STYLE}>
-          <div className="card" style={{ maxWidth: 360, width: '100%', margin: 0, textAlign: 'center' }}>
-            <h2>⬇️ Download Excel</h2>
-            <p style={{ fontSize: 14, marginBottom: 4 }}>Apakah Anda yakin akan mendownload file Excel?</p>
-            <button onClick={doDownload}>Ya</button>
-            <button type="button" className="secondary" onClick={() => setDownloadState(null)}>Tidak</button>
-          </div>
-        </div>
-      )}
-
-      {downloadState === 'downloading' && (
-        <div style={OVERLAY_STYLE}>
-          <div className="card" style={{ maxWidth: 360, width: '100%', margin: 0, textAlign: 'center' }}>
-            <div className="spinner" style={{ margin: '0 auto 12px' }} />
-            <p style={{ fontSize: 14 }}>File sedang didownload, Silahkan tunggu...</p>
-          </div>
-        </div>
-      )}
     </>
   );
 }

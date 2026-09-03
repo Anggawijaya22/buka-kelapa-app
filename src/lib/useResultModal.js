@@ -1,5 +1,6 @@
 'use client';
 import { useState } from 'react';
+import { IconCheckCircle, IconXCircle, IconRefreshCw } from './icons';
 
 // Popup "DATA BERHASIL DIKIRIM" / "DATA GAGAL DIKIRIM" — dipakai bareng oleh submit
 // Input Data, Simpan Perubahan History, dan tombol LIBUR PRODUKSI.
@@ -23,14 +24,16 @@ export default function useResultModal() {
     }}>
       <div className="card" style={{ maxWidth: 420, width: '100%', margin: 0, textAlign: 'center' }}>
         <h2 style={{ color: state.kind === 'success' ? 'var(--primary)' : 'var(--danger)' }}>
-          {state.kind === 'success' ? '✅ DATA BERHASIL DIKIRIM' : '❌ DATA GAGAL DIKIRIM'}
+          {state.kind === 'success'
+            ? (<><IconCheckCircle size={20} style={{ marginRight: 8 }} />DATA BERHASIL DIKIRIM</>)
+            : (<><IconXCircle size={20} style={{ marginRight: 8 }} />DATA GAGAL DIKIRIM</>)}
         </h2>
         {state.message && <p style={{ whiteSpace: 'pre-line', fontSize: 14, marginBottom: 4 }}>{state.message}</p>}
         {state.kind === 'success' ? (
           <button onClick={() => { const cb = state.onOk; close(); cb?.(); }}>OK</button>
         ) : (
           <>
-            <button onClick={() => { const cb = state.onRetry; close(); cb?.(); }}>🔁 Kirim Ulang</button>
+            <button onClick={() => { const cb = state.onRetry; close(); cb?.(); }}><IconRefreshCw size={16} style={{ marginRight: 6 }} />Kirim Ulang</button>
             <button type="button" className="secondary" onClick={close}>← Kembali</button>
           </>
         )}
