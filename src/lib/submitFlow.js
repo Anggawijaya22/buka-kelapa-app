@@ -78,9 +78,16 @@ export async function executeRekapSubmit({ form, actorSession, actionLabel, mode
 //   snapshot live, bukan buku besar per-tanggal, jadi edit tanggal lampau tidak boleh menimpa laporan
 //   hari ini yang sedang live).
 export async function executeShiftEdit({ id, target, waktu, mergedPayload, actorSession, writeToExcel, send, sendCount }) {
+  // Kolom `submissions.tanggal` disamakan dengan payload.tanggalIso tiap update — biasanya sama
+  // persis (tidak berubah), TAPI kalau admin mengoreksi Tanggal lewat Monitoring (lihat field
+  // Tanggal yang sekarang bisa diedit di EditForm — perbaikan utk kasus salah pilih tanggal saat
+  // input awal, misal ke-backdate), kolom ini WAJIB ikut ter-update supaya query per-tanggal di
+  // Monitoring/Log serta perhitungan writeToExcel (di pemanggil fungsi ini) konsisten pakai
+  // tanggal yang benar, bukan tanggal lama yang salah.
   if (!send) {
     await db.from('submissions').update({
       payload: mergedPayload,
+      tanggal: mergedPayload.tanggalIso,
       edited_at: new Date().toISOString(),
       edited_by_id: actorSession.id,
       edited_by_username: actorSession.username
@@ -97,6 +104,7 @@ export async function executeShiftEdit({ id, target, waktu, mergedPayload, actor
 
   await db.from('submissions').update({
     payload: mergedPayload,
+    tanggal: mergedPayload.tanggalIso,
     status: 'sent',
     send_count: sendCount,
     edited_at: new Date().toISOString(),
@@ -112,9 +120,11 @@ export async function executeShiftEdit({ id, target, waktu, mergedPayload, actor
 
 // Edit data REKAP lama lewat menu Monitoring — sama seperti executeShiftEdit di atas.
 export async function executeRekapEdit({ id, mergedPayload, actorSession, writeToExcel, send, sendCount }) {
+  // Lihat catatan kolom `tanggal` di executeShiftEdit di atas — berlaku sama persis di sini.
   if (!send) {
     await db.from('submissions').update({
       payload: mergedPayload,
+      tanggal: mergedPayload.tanggalIso,
       edited_at: new Date().toISOString(),
       edited_by_id: actorSession.id,
       edited_by_username: actorSession.username
@@ -131,6 +141,7 @@ export async function executeRekapEdit({ id, mergedPayload, actorSession, writeT
 
   await db.from('submissions').update({
     payload: mergedPayload,
+    tanggal: mergedPayload.tanggalIso,
     status: 'sent',
     send_count: sendCount,
     edited_at: new Date().toISOString(),

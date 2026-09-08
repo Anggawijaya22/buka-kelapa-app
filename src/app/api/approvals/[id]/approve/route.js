@@ -55,7 +55,11 @@ export async function POST(req, { params }) {
         throw new Error(`Data ini sudah dikirim ${MAX_SEND_COUNT}x dan terkunci sejak pengajuan ini dibuat — tidak bisa di-ACC lagi.`);
       }
 
-      const writeToExcel = existing.tanggal === todayIso();
+      // Pakai tanggal dari form_payload (bisa jadi sudah dikoreksi admin lewat Monitoring saat
+      // mengajukan edit ini), BUKAN existing.tanggal (tanggal lama sebelum diedit) — supaya kalau
+      // pengajuan ini sekalian memperbaiki tanggal yang salah, Excel ikut ter-update saat di-ACC.
+      const newTanggalIso = form.tanggalIso || existing.tanggal;
+      const writeToExcel = newTanggalIso === todayIso();
       const sendCount = (existing.send_count || 0) + 1;
 
       result = claimed.target === 'rekap'

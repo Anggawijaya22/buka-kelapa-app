@@ -93,10 +93,18 @@ export async function PUT(req) {
     }
   }
 
-  // Tanggal/waktu record tidak boleh diubah lewat edit — hanya field data yang dipakai
-  const { tanggal: _t, tanggalIso: _ti, waktu: _w, ...editableFields } = form;
+  // Waktu (pagi/siang/malam) tidak boleh diubah lewat edit — dipakai header baris 4 Excel,
+  // cuma bisa diset ulang lewat submit baru. Tanggal/tanggalIso SEKARANG BOLEH diubah — supaya
+  // admin bisa mengoreksi kalau tidak sengaja salah pilih tanggal (mis. ke-backdate) saat input
+  // awal, yang sebelumnya bikin Excel tidak pernah ter-update lagi (writeToExcel selalu false
+  // karena tanggal record tidak pernah cocok dengan hari ini, dan tidak ada cara memperbaikinya).
+  const { waktu: _w, ...editableFields } = form;
   const mergedPayload = { ...existing.payload, ...editableFields };
-  const writeToExcel = existing.tanggal === todayIso();
+  const newTanggalIso = mergedPayload.tanggalIso || existing.tanggal;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(newTanggalIso)) {
+    return NextResponse.json({ error: 'Format tanggal tidak valid' }, { status: 400 });
+  }
+  const writeToExcel = newTanggalIso === todayIso();
   const sendCount = (existing.send_count || 0) + 1;
 
   try {

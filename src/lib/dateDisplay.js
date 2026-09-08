@@ -11,3 +11,13 @@ export function formatIsoDisplay(iso) {
   if (!y || !m || !d) return '';
   return `${d}/${m}/${y}`;
 }
+
+// ISO "YYYY-MM-DD" -> "DD/MM/YY" (format cell Tanggal versi lama / label tampilan `form.tanggal`
+// yang dipakai payload n8n). Dipakai saat admin mengoreksi Tanggal lewat Monitoring supaya
+// `form.tanggal` (display) tetap ikut sinkron dengan `form.tanggalIso` (sumber kebenaran) yang baru.
+export function toExcelDateFromIso(iso) {
+  if (!iso) return '';
+  const [y, m, d] = String(iso).split('-');
+  if (!y || !m || !d) return '';
+  return `${d}/${m}/${y.slice(2)}`;
+}

@@ -8,9 +8,9 @@ import useResultModal from '@/lib/useResultModal';
 import useConfirm from '@/lib/useConfirm';
 import useAnomaliConfirm from '@/lib/useAnomaliConfirm';
 import { detectShiftAnomali, detectRekapAnomali } from '@/lib/anomaliDetect';
-import { formatIsoDisplay } from '@/lib/dateDisplay';
+import { formatIsoDisplay, toExcelDateFromIso } from '@/lib/dateDisplay';
 import useDownloadExcel from '@/lib/useDownloadExcel';
-import { IconDownload } from '@/lib/icons';
+import { IconDownload, IconCalendar, IconAlertTriangle } from '@/lib/icons';
 
 const TARGET_LABELS = { shiftA: 'Shift A', shiftB: 'Shift B', shiftC: 'Shift C', rekap: '📋 Rekap Harian' };
 
@@ -83,6 +83,15 @@ function EditForm({ item, cooldown, onSaved, onCancel }) {
 
   function set(field, value) { setForm(f => ({ ...f, [field]: value })); }
   function setPhField(line, key, value) { setPh(p => ({ ...p, [line]: { ...p[line], [key]: value } })); }
+  // Perbaikan tanggal salah pilih (mis. ke-backdate) saat input awal — dulu tanggal record TIDAK
+  // BISA diubah lewat Monitoring sama sekali, jadi kalau kepilih tanggal yang salah, Excel tidak
+  // akan pernah ter-update lagi (server hanya menulis Excel kalau tanggal record = hari ini).
+  // Sekarang admin bisa koreksi di sini; tanggal (dd/mm/yy, dipakai label & payload n8n) ikut
+  // disinkronkan otomatis dari tanggalIso yang baru.
+  function setTanggalIso(iso) {
+    setForm(f => ({ ...f, tanggalIso: iso, tanggal: toExcelDateFromIso(iso) }));
+  }
+  const tanggalBerubah = form.tanggalIso !== item.payload?.tanggalIso;
 
   function buildPayload() {
     const payload = { ...form };
@@ -119,6 +128,7 @@ function EditForm({ item, cooldown, onSaved, onCancel }) {
       ? `Perubahan tersimpan & ${data.cellsWritten} cell diupdate ke Excel.`
       : 'Perubahan tersimpan ke riwayat. Tanggal ini bukan hari ini, jadi Excel (laporan live) tidak disentuh.';
     text += data.waSent ? ' Notifikasi WA terkirim 📨' : ` ⚠️ ${data.warn || 'WA tidak terkirim'}`;
+    if (tanggalBerubah) text += ` Data ini sekarang tercatat di tanggal ${formatIsoDisplay(form.tanggalIso)} — cek di sana kalau tidak kelihatan lagi di tanggal lama.`;
     showSuccess(text, () => onSaved?.());
   }
 
@@ -199,6 +209,22 @@ function EditForm({ item, cooldown, onSaved, onCancel }) {
       {anomaliModal}
       {resultModal}
       {confirmModal}
+      <div className="card">
+        <label>Tanggal</label>
+        <input type="date" value={form.tanggalIso || ''} onChange={e => setTanggalIso(e.target.value)} />
+        <small style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, color: 'var(--muted, #666)' }}>
+          <IconCalendar size={14} />{formatIsoDisplay(form.tanggalIso)} (format Indonesia: DD/MM/YYYY)
+        </small>
+        <p className="sub" style={{ marginTop: 8, marginBottom: 0 }}>
+          Ubah HANYA kalau tanggal salah dipilih saat input awal. Excel akan mengikuti tanggal
+          BARU ini — cuma ter-update kalau tanggal baru = hari ini, sama seperti aturan biasa.
+        </p>
+        {tanggalBerubah && (
+          <p className="error" style={{ marginTop: 8, marginBottom: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <IconAlertTriangle size={14} />Tanggal diubah dari {formatIsoDisplay(item.payload?.tanggalIso)} ke {formatIsoDisplay(form.tanggalIso)}.
+          </p>
+        )}
+      </div>
       <ProductionFormFields isRekap={isRekap} form={form} set={set} ph={ph} setPhField={setPhField} errors={errors} />
       {msg.text && <p className={msg.type}>{msg.text}</p>}
       <CooldownNotice seconds={cooldown.remaining} />
