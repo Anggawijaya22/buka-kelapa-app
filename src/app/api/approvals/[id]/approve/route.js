@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { db, logAudit } from '@/lib/db';
 import { executeShiftSubmit, executeRekapSubmit, executeShiftEdit, executeRekapEdit } from '@/lib/submitFlow';
-import { todayIso } from '@/lib/date';
 import { MAX_SEND_COUNT } from '@/lib/limits';
 
 const APPROVER_ROLES = ['viewer', 'superadmin'];
@@ -55,11 +54,18 @@ export async function POST(req, { params }) {
         throw new Error(`Data ini sudah dikirim ${MAX_SEND_COUNT}x dan terkunci sejak pengajuan ini dibuat — tidak bisa di-ACC lagi.`);
       }
 
-      // Pakai tanggal dari form_payload (bisa jadi sudah dikoreksi admin lewat Monitoring saat
-      // mengajukan edit ini), BUKAN existing.tanggal (tanggal lama sebelum diedit) — supaya kalau
-      // pengajuan ini sekalian memperbaiki tanggal yang salah, Excel ikut ter-update saat di-ACC.
-      const newTanggalIso = form.tanggalIso || existing.tanggal;
-      const writeToExcel = newTanggalIso === todayIso();
+      // ACC SELALU menulis ke Excel — TIDAK digating "tanggal harus = hari ini" seperti edit biasa
+      // di Monitoring (aturan itu utk mencegah edit CASUAL ke tanggal lampau tidak sengaja menimpa
+      // laporan live hari ini; lihat executeShiftEdit/executeRekapEdit & api/monitoring PUT).
+      // ACC adalah tindakan SENGAJA yang sudah direview manusia (Viewer) — begitu di-ACC, datanya
+      // sah utk masuk Excel apa adanya, sama seperti submission baru (executeShiftSubmit/
+      // executeRekapSubmit di branch bawah selalu menulis tanpa syarat tanggal).
+      // Bug yang pernah terjadi (ditemukan 2026-09-11): karena masih pakai gate tanggal, ACC atas
+      // data yang tanggalnya beda dari hari-H approval (mis. submit lewat tengah malam, atau baru
+      // sempat direview besoknya) diam-diam TIDAK menulis Excel (cells_written=0) TAPI webhook
+      // laporan tetap terkirim (wa_sent=true) — jadi pesan yang sampai ke bos menampilkan data
+      // Excel yang LAMA/tidak berubah, padahal sudah di-ACC.
+      const writeToExcel = true;
       const sendCount = (existing.send_count || 0) + 1;
 
       result = claimed.target === 'rekap'
