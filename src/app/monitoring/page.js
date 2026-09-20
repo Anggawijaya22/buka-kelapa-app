@@ -124,9 +124,7 @@ function EditForm({ item, cooldown, onSaved, onCancel }) {
       showSuccess('Perubahan draft tersimpan — masih belum dikirim ke Excel/WA.', () => onSaved?.());
       return;
     }
-    let text = data.wroteToExcel
-      ? `Perubahan tersimpan & ${data.cellsWritten} cell diupdate ke Excel.`
-      : 'Perubahan tersimpan ke riwayat. Tanggal ini bukan hari ini, jadi Excel (laporan live) tidak disentuh.';
+    let text = `Perubahan tersimpan & ${data.cellsWritten} cell diupdate ke Excel.`;
     text += data.waSent ? ' Notifikasi WA terkirim 📨' : ` ⚠️ ${data.warn || 'WA tidak terkirim'}`;
     if (tanggalBerubah) text += ` Data ini sekarang tercatat di tanggal ${formatIsoDisplay(form.tanggalIso)} — cek di sana kalau tidak kelihatan lagi di tanggal lama.`;
     showSuccess(text, () => onSaved?.());
@@ -216,8 +214,8 @@ function EditForm({ item, cooldown, onSaved, onCancel }) {
           <IconCalendar size={14} />{formatIsoDisplay(form.tanggalIso)} (format Indonesia: DD/MM/YYYY)
         </small>
         <p className="sub" style={{ marginTop: 8, marginBottom: 0 }}>
-          Ubah HANYA kalau tanggal salah dipilih saat input awal. Excel akan mengikuti tanggal
-          BARU ini — cuma ter-update kalau tanggal baru = hari ini, sama seperti aturan biasa.
+          Ubah HANYA kalau tanggal salah dipilih saat input awal. Saat dikirim, Excel & laporan WA
+          akan mengikuti tanggal dan data terbaru ini.
         </p>
         {tanggalBerubah && (
           <p className="error" style={{ marginTop: 8, marginBottom: 0, display: 'flex', alignItems: 'center', gap: 6 }}>

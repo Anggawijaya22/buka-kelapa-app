@@ -73,17 +73,15 @@ export async function executeRekapSubmit({ form, actorSession, actionLabel, mode
 // Edit data SHIFT lama lewat menu Monitoring — menimpa payload submission yang sama (bukan insert baru).
 // send=false: HANYA update payload, tetap berstatus draft, tidak menyentuh Excel/webhook/hitungan kirim
 //   (dipakai tombol "Simpan" saat mengedit draft yang belum pernah dikirim).
-// send=true: kirim beneran — update payload + tulis Excel (kalau writeToExcel) + webhook + send_count+1
-//   + status jadi 'sent'. writeToExcel hanya true kalau tanggal yang diedit = hari ini (Excel cuma
-//   snapshot live, bukan buku besar per-tanggal, jadi edit tanggal lampau tidak boleh menimpa laporan
-//   hari ini yang sedang live).
-export async function executeShiftEdit({ id, target, waktu, mergedPayload, actorSession, writeToExcel, send, sendCount }) {
+// send=true: kirim beneran — update payload + SELALU tulis Excel + webhook + send_count+1
+//   + status jadi 'sent'. Excel SELALU ditulis, apa pun tanggal recordnya (termasuk backdate) —
+//   Excel = "data terakhir yang diinput/diedit/dikirim ulang" (keputusan user 2026-09-20).
+//   Dulu ada gate "hanya kalau tanggal = hari ini" yang bikin shift malam (tanggal kemarin, dikirim
+//   lewat tengah malam) & koreksi tanggal tidak pernah masuk Excel tapi WA tetap terkirim.
+export async function executeShiftEdit({ id, target, waktu, mergedPayload, actorSession, send, sendCount }) {
   // Kolom `submissions.tanggal` disamakan dengan payload.tanggalIso tiap update — biasanya sama
-  // persis (tidak berubah), TAPI kalau admin mengoreksi Tanggal lewat Monitoring (lihat field
-  // Tanggal yang sekarang bisa diedit di EditForm — perbaikan utk kasus salah pilih tanggal saat
-  // input awal, misal ke-backdate), kolom ini WAJIB ikut ter-update supaya query per-tanggal di
-  // Monitoring/Log serta perhitungan writeToExcel (di pemanggil fungsi ini) konsisten pakai
-  // tanggal yang benar, bukan tanggal lama yang salah.
+  // persis (tidak berubah), TAPI kalau admin mengoreksi Tanggal lewat Monitoring, kolom ini WAJIB
+  // ikut ter-update supaya query per-tanggal di Monitoring/Log konsisten dengan tanggal yang benar.
   if (!send) {
     await db.from('submissions').update({
       payload: mergedPayload,
@@ -96,11 +94,8 @@ export async function executeShiftEdit({ id, target, waktu, mergedPayload, actor
     return { cellsWritten: 0, waSent: false, warn: null, wroteToExcel: false, isDraft: true };
   }
 
-  let written = [];
-  if (writeToExcel) {
-    const cellMap = buildShiftCellMap(target, mergedPayload, waktu);
-    written = await writeCells(cellMap);
-  }
+  const cellMap = buildShiftCellMap(target, mergedPayload, waktu);
+  const written = await writeCells(cellMap);
 
   await db.from('submissions').update({
     payload: mergedPayload,
@@ -112,14 +107,14 @@ export async function executeShiftEdit({ id, target, waktu, mergedPayload, actor
     edited_by_username: actorSession.username
   }).eq('id', id);
 
-  await logAudit(actorSession, 'EDIT_' + target.toUpperCase(), { tanggal: mergedPayload.tanggal, waktu, cellsWritten: written.length, wroteToExcel: writeToExcel, sendCount });
+  await logAudit(actorSession, 'EDIT_' + target.toUpperCase(), { tanggal: mergedPayload.tanggal, waktu, cellsWritten: written.length, sendCount });
 
   const n8n = await triggerN8n(process.env.N8N_WEBHOOK_SHIFT, { target, waktu, tanggal: mergedPayload.tanggal });
-  return { cellsWritten: written.length, waSent: n8n.ok, warn: n8n.warn || null, wroteToExcel: writeToExcel };
+  return { cellsWritten: written.length, waSent: n8n.ok, warn: n8n.warn || null };
 }
 
 // Edit data REKAP lama lewat menu Monitoring — sama seperti executeShiftEdit di atas.
-export async function executeRekapEdit({ id, mergedPayload, actorSession, writeToExcel, send, sendCount }) {
+export async function executeRekapEdit({ id, mergedPayload, actorSession, send, sendCount }) {
   // Lihat catatan kolom `tanggal` di executeShiftEdit di atas — berlaku sama persis di sini.
   if (!send) {
     await db.from('submissions').update({
@@ -133,11 +128,8 @@ export async function executeRekapEdit({ id, mergedPayload, actorSession, writeT
     return { cellsWritten: 0, waSent: false, warn: null, wroteToExcel: false, isDraft: true };
   }
 
-  let written = [];
-  if (writeToExcel) {
-    const cellMap = buildRekapCellMap(mergedPayload);
-    written = await writeCells(cellMap);
-  }
+  const cellMap = buildRekapCellMap(mergedPayload);
+  const written = await writeCells(cellMap);
 
   await db.from('submissions').update({
     payload: mergedPayload,
@@ -149,10 +141,10 @@ export async function executeRekapEdit({ id, mergedPayload, actorSession, writeT
     edited_by_username: actorSession.username
   }).eq('id', id);
 
-  await logAudit(actorSession, 'EDIT_REKAP', { tanggal: mergedPayload.tanggal, cellsWritten: written.length, wroteToExcel: writeToExcel, sendCount });
+  await logAudit(actorSession, 'EDIT_REKAP', { tanggal: mergedPayload.tanggal, cellsWritten: written.length, sendCount });
 
   const n8n = await triggerN8n(process.env.N8N_WEBHOOK_REKAP, { tanggal: mergedPayload.tanggal });
-  return { cellsWritten: written.length, waSent: n8n.ok, warn: n8n.warn || null, wroteToExcel: writeToExcel };
+  return { cellsWritten: written.length, waSent: n8n.ok, warn: n8n.warn || null };
 }
 
 // Tombol LIBUR PRODUKSI (per shift saja — Rekap TIDAK ikut, sesuai keputusan: cukup shift dulu).

@@ -94,23 +94,21 @@ export async function PUT(req) {
   }
 
   // Waktu (pagi/siang/malam) tidak boleh diubah lewat edit — dipakai header baris 4 Excel,
-  // cuma bisa diset ulang lewat submit baru. Tanggal/tanggalIso SEKARANG BOLEH diubah — supaya
-  // admin bisa mengoreksi kalau tidak sengaja salah pilih tanggal (mis. ke-backdate) saat input
-  // awal, yang sebelumnya bikin Excel tidak pernah ter-update lagi (writeToExcel selalu false
-  // karena tanggal record tidak pernah cocok dengan hari ini, dan tidak ada cara memperbaikinya).
+  // cuma bisa diset ulang lewat submit baru. Tanggal/tanggalIso BOLEH diubah (koreksi salah pilih
+  // tanggal). Setiap kirim (send=true) SELALU menulis Excel apa pun tanggalnya — Excel mengikuti
+  // data terakhir yang diinput/diedit/dikirim ulang (keputusan user 2026-09-20).
   const { waktu: _w, ...editableFields } = form;
   const mergedPayload = { ...existing.payload, ...editableFields };
   const newTanggalIso = mergedPayload.tanggalIso || existing.tanggal;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(newTanggalIso)) {
     return NextResponse.json({ error: 'Format tanggal tidak valid' }, { status: 400 });
   }
-  const writeToExcel = newTanggalIso === todayIso();
   const sendCount = (existing.send_count || 0) + 1;
 
   try {
     const result = isRekap
-      ? await executeRekapEdit({ id, mergedPayload, actorSession: auth.session, writeToExcel, send: willSend, sendCount })
-      : await executeShiftEdit({ id, target: existing.target, waktu: existing.payload?.waktu, mergedPayload, actorSession: auth.session, writeToExcel, send: willSend, sendCount });
+      ? await executeRekapEdit({ id, mergedPayload, actorSession: auth.session, send: willSend, sendCount })
+      : await executeShiftEdit({ id, target: existing.target, waktu: existing.payload?.waktu, mergedPayload, actorSession: auth.session, send: willSend, sendCount });
 
     if (!willSend) {
       return NextResponse.json({ ok: true, ...result });

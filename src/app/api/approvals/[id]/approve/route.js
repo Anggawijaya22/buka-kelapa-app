@@ -65,12 +65,11 @@ export async function POST(req, { params }) {
       // sempat direview besoknya) diam-diam TIDAK menulis Excel (cells_written=0) TAPI webhook
       // laporan tetap terkirim (wa_sent=true) — jadi pesan yang sampai ke bos menampilkan data
       // Excel yang LAMA/tidak berubah, padahal sudah di-ACC.
-      const writeToExcel = true;
       const sendCount = (existing.send_count || 0) + 1;
 
       result = claimed.target === 'rekap'
-        ? await executeRekapEdit({ id: existing.id, mergedPayload: form, actorSession, writeToExcel, send: true, sendCount })
-        : await executeShiftEdit({ id: existing.id, target: claimed.target, waktu: existing.payload?.waktu, mergedPayload: form, actorSession, writeToExcel, send: true, sendCount });
+        ? await executeRekapEdit({ id: existing.id, mergedPayload: form, actorSession, send: true, sendCount })
+        : await executeShiftEdit({ id: existing.id, target: claimed.target, waktu: existing.payload?.waktu, mergedPayload: form, actorSession, send: true, sendCount });
     } else {
       result = claimed.target === 'rekap'
         ? await executeRekapSubmit({ form, actorSession, actionLabel: 'SUBMIT_REKAP_ACC' })
