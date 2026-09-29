@@ -6,7 +6,7 @@ import { db, logAudit } from '@/lib/db';
 export async function GET() {
   const auth = await requireAuth('superadmin');
   if (auth.error) return NextResponse.json({ error: auth.error }, { status: auth.status });
-  const { data } = await db.from('users').select('id, username, role, shift, created_at').order('created_at');
+  const { data } = await db.from('users').select('id, username, role, shift, failed_login_attempts, created_at').order('created_at');
   return NextResponse.json({ users: data });
 }
 
@@ -65,7 +65,9 @@ export async function PUT(req) {
     return NextResponse.json({ error: 'Password minimal 6 karakter' }, { status: 400 });
   }
   const { data: target } = await db.from('users').select('username').eq('id', id).single();
-  await db.from('users').update({ password_hash: bcrypt.hashSync(password, 10) }).eq('id', id);
+  // failed_login_attempts direset ke 0 di sini juga — reset password admin adalah SATU-SATUNYA
+  // cara membuka akun yang terkunci karena 5x salah login (lihat api/auth/login).
+  await db.from('users').update({ password_hash: bcrypt.hashSync(password, 10), failed_login_attempts: 0 }).eq('id', id);
   await logAudit(auth.session, 'RESET_PASSWORD_USER', { username: target?.username });
   return NextResponse.json({ ok: true });
 }

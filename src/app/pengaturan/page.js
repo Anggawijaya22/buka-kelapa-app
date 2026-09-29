@@ -158,13 +158,18 @@ function KelolaUserSection() {
       <div className="card" style={{ overflowX: 'auto' }}>
         <h2>Daftar User</h2>
         <table>
-          <thead><tr><th>Username</th><th>Role</th><th>Shift</th><th>Aksi</th></tr></thead>
+          <thead><tr><th>Username</th><th>Role</th><th>Shift</th><th>Status</th><th>Aksi</th></tr></thead>
           <tbody>
             {users.map(u => (
               <tr key={u.id}>
                 <td>{u.username}</td>
                 <td><span className={`badge ${u.role}`}>{ROLE_LABELS[u.role] || u.role}</span></td>
                 <td>{u.role === 'admin' ? (u.shift ? 'Shift ' + u.shift.slice(-1) : '⚠️ belum diset') : '-'}</td>
+                <td>
+                  {u.failed_login_attempts >= 5
+                    ? <span className="badge superadmin">🔒 Terkunci</span>
+                    : (u.failed_login_attempts > 0 ? <span style={{ fontSize: 12, color: 'var(--muted)' }}>{u.failed_login_attempts}x gagal</span> : '-')}
+                </td>
                 <td>
                   {u.role === 'admin' && (
                     <a href="#" onClick={e => { e.preventDefault(); ubahShift(u.id, u.username, u.shift); }} style={{ marginRight: 12 }}>Ubah Shift</a>

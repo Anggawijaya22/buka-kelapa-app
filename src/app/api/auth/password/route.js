@@ -17,7 +17,7 @@ export async function PUT(req) {
     return NextResponse.json({ error: 'Password lama salah' }, { status: 401 });
   }
 
-  await db.from('users').update({ password_hash: bcrypt.hashSync(newPassword, 10) }).eq('id', user.id);
+  await db.from('users').update({ password_hash: bcrypt.hashSync(newPassword, 10), failed_login_attempts: 0 }).eq('id', user.id);
   await logAudit(auth.session, 'GANTI_PASSWORD', null);
   return NextResponse.json({ ok: true });
 }
