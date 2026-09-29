@@ -4,7 +4,7 @@ import { db, logAudit } from '@/lib/db';
 import { createSession } from '@/lib/auth';
 import { MAX_FAILED_LOGIN_ATTEMPTS } from '@/lib/limits';
 
-const LOCKED_MSG = `Akun terkunci karena ${MAX_FAILED_LOGIN_ATTEMPTS}x salah password berturut-turut. Hubungi admin untuk reset password.`;
+const LOCKED_MSG = 'Password 5x salah, silahkan hubungi admin';
 
 // Keamanan (2026-09-29): brute force login sebelumnya tidak dibatasi sama sekali. Sekarang
 // dilacak per-user lewat kolom users.failed_login_attempts (persist di DB, bukan in-memory,
@@ -12,6 +12,9 @@ const LOCKED_MSG = `Akun terkunci karena ${MAX_FAILED_LOGIN_ATTEMPTS}x salah pas
 // mencapai MAX_FAILED_LOGIN_ATTEMPTS, akun terkunci TOTAL (login ditolak walau passwordnya
 // benar) sampai admin/superadmin reset password user itu lewat Pengaturan → Kelola User
 // (reset password otomatis membuka kunci — lihat api/users PUT).
+// Developer (superadmin) DIKECUALIKAN dari lockout ini (keputusan user) — cuma Developer yang
+// bisa "menormalkan" akun lain lewat Kelola User, jadi kalau akun Developer sendiri yang
+// terkunci, tidak ada admin lebih tinggi di dalam app utk membukanya lagi.
 export async function POST(req) {
   const { username, password } = await req.json();
   if (!username || !password) {
@@ -22,17 +25,20 @@ export async function POST(req) {
   if (!user) {
     return NextResponse.json({ error: 'Username atau password salah' }, { status: 401 });
   }
+  const isSuperadmin = user.role === 'superadmin';
 
-  if (user.failed_login_attempts >= MAX_FAILED_LOGIN_ATTEMPTS) {
+  if (!isSuperadmin && user.failed_login_attempts >= MAX_FAILED_LOGIN_ATTEMPTS) {
     return NextResponse.json({ error: LOCKED_MSG }, { status: 403 });
   }
 
   if (!bcrypt.compareSync(password, user.password_hash)) {
-    const attempts = user.failed_login_attempts + 1;
-    await db.from('users').update({ failed_login_attempts: attempts }).eq('id', user.id);
-    if (attempts >= MAX_FAILED_LOGIN_ATTEMPTS) {
-      await logAudit(user, 'AKUN_TERKUNCI', { attempts });
-      return NextResponse.json({ error: LOCKED_MSG }, { status: 403 });
+    if (!isSuperadmin) {
+      const attempts = user.failed_login_attempts + 1;
+      await db.from('users').update({ failed_login_attempts: attempts }).eq('id', user.id);
+      if (attempts >= MAX_FAILED_LOGIN_ATTEMPTS) {
+        await logAudit(user, 'AKUN_TERKUNCI', { attempts });
+        return NextResponse.json({ error: LOCKED_MSG }, { status: 403 });
+      }
     }
     return NextResponse.json({ error: 'Username atau password salah' }, { status: 401 });
   }
