@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, useRef, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Nav from '@/lib/Nav';
 import ProductionFormFields, { emptyPh, phToPayload, validateProductionForm } from '@/lib/ProductionFormFields';
@@ -41,6 +41,9 @@ function FormInner() {
   const { modal: resultModal, showSuccess, showError } = useResultModal();
   const { modal: confirmModal, confirm: askKirimConfirm } = useConfirm();
   const [savingDraft, setSavingDraft] = useState(false);
+  // Penjaga klik ganda: state `loading` baru menyala SETELAH cek anomali (ada await fetch), jadi
+  // tombol Kirim Data masih bisa diklik dua kali di jeda itu — ref ini menyala seketika.
+  const submitting = useRef(false);
 
   function set(field, value) {
     setForm(f => ({ ...f, [field]: value }));
@@ -125,7 +128,16 @@ function FormInner() {
   }
 
   async function doSubmit() {
-    if (cooldown.remaining > 0) return;
+    if (cooldown.remaining > 0 || submitting.current) return;
+    submitting.current = true;
+    try {
+      await doSubmitInner();
+    } finally {
+      submitting.current = false;
+    }
+  }
+
+  async function doSubmitInner() {
     setMsg({ type: '', text: '' });
 
     const deteksi = isRekap ? await detectRekapAnomali() : detectShiftAnomali(form);

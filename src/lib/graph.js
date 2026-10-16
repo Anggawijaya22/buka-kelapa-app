@@ -4,6 +4,41 @@ const TOKEN_URL = 'https://login.microsoftonline.com/consumers/oauth2/v2.0/token
 const GRAPH = 'https://graph.microsoft.com/v1.0';
 const SCOPES = 'offline_access Files.ReadWrite Files.ReadWrite.All';
 
+// ---------- Retry utk error SEMENTARA dari Microsoft (2026-10-16) ----------
+// Hanya status yang memang berarti "coba lagi sebentar": 408/429 (timeout/throttle), 423 (workbook
+// sedang terkunci), 5xx, plus putus jaringan. 404 SENGAJA TIDAK di-retry: itu artinya file/sheet
+// benar-benar tidak ada (mis. file OneDrive terhapus) — mengulang cuma buang waktu. Aman dipakai
+// utk PATCH satu cell karena idempoten (menulis nilai yang sama dua kali hasilnya sama).
+// TIDAK dipakai di exchangeCodeForToken: authorization code cuma bisa dipakai sekali.
+const RETRY_STATUS = new Set([408, 423, 429, 500, 502, 503, 504]);
+const MAX_ATTEMPTS = 3;
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+async function fetchWithRetry(url, options) {
+  for (let attempt = 1; ; attempt++) {
+    let res;
+    try {
+      res = await fetch(url, options);
+    } catch (e) {
+      if (attempt >= MAX_ATTEMPTS) throw e;
+      await sleep(500 * attempt * attempt);
+      continue;
+    }
+    if (!RETRY_STATUS.has(res.status) || attempt >= MAX_ATTEMPTS) return res;
+    const retryAfter = Number(res.headers.get('retry-after'));
+    await sleep(Number.isFinite(retryAfter) && retryAfter > 0 ? Math.min(retryAfter * 1000, 3000) : 500 * attempt * attempt);
+  }
+}
+
+// Pesan error Graph + petunjuk kalau file/sheet tidak ditemukan (supaya penyebabnya langsung jelas).
+async function graphErrorText(res) {
+  const err = await res.json().catch(() => ({}));
+  const msg = err?.error?.message || res.status;
+  return err?.error?.code === 'itemNotFound'
+    ? `${msg} (file Excel tidak ditemukan di OneDrive — cek apakah file terhapus/dipindah atau MS_FILE_ID berubah)`
+    : msg;
+}
+
 // ---------- OAuth: tukar code jadi token (dipanggil sekali oleh owner) ----------
 export async function exchangeCodeForToken(code) {
   const res = await fetch(TOKEN_URL, {
@@ -30,7 +65,7 @@ export async function getAccessToken() {
   const { data: row } = await db.from('ms_tokens').select('refresh_token').eq('id', 1).single();
   if (!row) throw new Error('Microsoft belum terhubung. Owner harus login sekali di /api/auth/ms/start');
 
-  const res = await fetch(TOKEN_URL, {
+  const res = await fetchWithRetry(TOKEN_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
@@ -55,7 +90,7 @@ export async function getAccessToken() {
 export async function writeCell(accessToken, cellAddress, value) {
   const sheet = encodeURIComponent(process.env.MS_SHEET_NAME);
   const url = `${GRAPH}/me/drive/items/${process.env.MS_FILE_ID}/workbook/worksheets('${sheet}')/range(address='${cellAddress}')`;
-  const res = await fetch(url, {
+  const res = await fetchWithRetry(url, {
     method: 'PATCH',
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -64,8 +99,7 @@ export async function writeCell(accessToken, cellAddress, value) {
     body: JSON.stringify({ values: [[value]] })
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(`Gagal tulis ${cellAddress}: ${err?.error?.message || res.status}`);
+    throw new Error(`Gagal tulis ${cellAddress}: ${await graphErrorText(res)}`);
   }
   return true;
 }
@@ -100,9 +134,9 @@ export async function writeCellsForce(cellValueMap) {
 export async function downloadExcelFile() {
   const token = await getAccessToken();
   const url = `${GRAPH}/me/drive/items/${process.env.MS_FILE_ID}/content`;
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  const res = await fetchWithRetry(url, { headers: { Authorization: `Bearer ${token}` } });
   if (!res.ok) {
-    throw new Error(`Gagal download file Excel (${res.status})`);
+    throw new Error(`Gagal download file Excel: ${await graphErrorText(res)}`);
   }
   return res.arrayBuffer();
 }
@@ -112,12 +146,11 @@ export async function readRange(rangeAddress) {
   const token = await getAccessToken();
   const sheet = encodeURIComponent(process.env.MS_SHEET_NAME);
   const url = `${GRAPH}/me/drive/items/${process.env.MS_FILE_ID}/workbook/worksheets('${sheet}')/range(address='${rangeAddress}')`;
-  const res = await fetch(url, {
+  const res = await fetchWithRetry(url, {
     headers: { Authorization: `Bearer ${token}` }
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(`Gagal baca range: ${err?.error?.message || res.status}`);
+    throw new Error(`Gagal baca range: ${await graphErrorText(res)}`);
   }
   const data = await res.json();
   return { values: data.values, text: data.text };

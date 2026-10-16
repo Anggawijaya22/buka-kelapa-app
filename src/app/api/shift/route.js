@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { SHIFT_LABELS } from '@/lib/excel-map';
 import { executeShiftSubmit } from '@/lib/submitFlow';
-import { checkCooldown, markSubmitted } from '@/lib/cooldown';
+import { claimSubmitSlot, releaseSubmitSlot } from '@/lib/cooldown';
 import { getCooldownMinutes } from '@/lib/settings';
 
 export async function POST(req) {
@@ -32,11 +32,14 @@ export async function POST(req) {
     return NextResponse.json({ error: 'Tanggal wajib diisi' }, { status: 400 });
   }
 
-  // Simpan sebagai draft TIDAK kena cooldown (tidak kirim WA/Excel sama sekali)
+  // Simpan sebagai draft TIDAK kena cooldown (tidak kirim WA/Excel sama sekali).
+  // Selain draft: slot cooldown DIKLAIM atomik di awal (cegah klik ganda lolos dua-duanya),
+  // dan dilepas lagi kalau proses gagal supaya user bisa langsung coba ulang.
+  let claim = null;
   if (!isDraft) {
-    const cd = await checkCooldown(auth.session);
-    if (!cd.ok) {
-      return NextResponse.json({ error: `Tunggu ${cd.remainingSeconds} detik lagi sebelum submit berikutnya`, cooldownRemainingSeconds: cd.remainingSeconds }, { status: 429 });
+    claim = await claimSubmitSlot(auth.session);
+    if (!claim.ok) {
+      return NextResponse.json({ error: `Tunggu ${claim.remainingSeconds} detik lagi sebelum submit berikutnya`, cooldownRemainingSeconds: claim.remainingSeconds }, { status: 429 });
     }
   }
 
@@ -45,10 +48,10 @@ export async function POST(req) {
     if (isDraft) {
       return NextResponse.json({ ok: true, ...result });
     }
-    await markSubmitted(auth.session.id);
     const cooldownMinutes = await getCooldownMinutes();
     return NextResponse.json({ ok: true, ...result, cooldownSeconds: cooldownMinutes * 60 });
   } catch (e) {
+    await releaseSubmitSlot(claim);
     return NextResponse.json({ error: e.message }, { status: 500 });
   }
 }

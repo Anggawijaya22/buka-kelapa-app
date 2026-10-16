@@ -3,7 +3,7 @@ import { requireAuth } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { todayIso } from '@/lib/date';
 import { executeShiftEdit, executeRekapEdit } from '@/lib/submitFlow';
-import { checkCooldown, markSubmitted } from '@/lib/cooldown';
+import { claimSubmitSlot, releaseSubmitSlot } from '@/lib/cooldown';
 import { getCooldownMinutes } from '@/lib/settings';
 import { MAX_SEND_COUNT } from '@/lib/limits';
 
@@ -86,13 +86,6 @@ export async function PUT(req) {
   // opsi "simpan tanpa kirim" untuk record yang sudah live di Excel.
   const willSend = existing.status !== 'draft' || send !== false;
 
-  if (willSend) {
-    const cd = await checkCooldown(auth.session);
-    if (!cd.ok) {
-      return NextResponse.json({ error: `Tunggu ${cd.remainingSeconds} detik lagi sebelum submit berikutnya`, cooldownRemainingSeconds: cd.remainingSeconds }, { status: 429 });
-    }
-  }
-
   // Waktu (pagi/siang/malam) tidak boleh diubah lewat edit — dipakai header baris 4 Excel,
   // cuma bisa diset ulang lewat submit baru. Tanggal/tanggalIso BOLEH diubah (koreksi salah pilih
   // tanggal). Setiap kirim (send=true) SELALU menulis Excel apa pun tanggalnya — Excel mengikuti
@@ -105,6 +98,17 @@ export async function PUT(req) {
   }
   const sendCount = (existing.send_count || 0) + 1;
 
+  // Kirim beneran: klaim slot cooldown ATOMIK di awal (cegah klik ganda lolos dua-duanya),
+  // dilepas lagi kalau proses gagal. Dicek SETELAH validasi di atas supaya request yang ditolak
+  // 400 tidak menghabiskan slot.
+  let claim = null;
+  if (willSend) {
+    claim = await claimSubmitSlot(auth.session);
+    if (!claim.ok) {
+      return NextResponse.json({ error: `Tunggu ${claim.remainingSeconds} detik lagi sebelum submit berikutnya`, cooldownRemainingSeconds: claim.remainingSeconds }, { status: 429 });
+    }
+  }
+
   try {
     const result = isRekap
       ? await executeRekapEdit({ id, mergedPayload, actorSession: auth.session, send: willSend, sendCount })
@@ -113,10 +117,10 @@ export async function PUT(req) {
     if (!willSend) {
       return NextResponse.json({ ok: true, ...result });
     }
-    await markSubmitted(auth.session.id);
     const cooldownMinutes = await getCooldownMinutes();
     return NextResponse.json({ ok: true, ...result, sendCount, cooldownSeconds: cooldownMinutes * 60 });
   } catch (e) {
+    await releaseSubmitSlot(claim);
     return NextResponse.json({ error: e.message }, { status: 500 });
   }
 }

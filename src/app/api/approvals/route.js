@@ -3,7 +3,7 @@ import { requireAuth } from '@/lib/auth';
 import { db, logAudit } from '@/lib/db';
 import { SHIFT_LABELS } from '@/lib/excel-map';
 import { triggerN8n } from '@/lib/n8n';
-import { checkCooldown, markSubmitted } from '@/lib/cooldown';
+import { claimSubmitSlot, releaseSubmitSlot } from '@/lib/cooldown';
 import { getCooldownMinutes } from '@/lib/settings';
 import { MAX_SEND_COUNT } from '@/lib/limits';
 
@@ -98,9 +98,11 @@ export async function POST(req) {
     }
   }
 
-  const cd = await checkCooldown(auth.session);
-  if (!cd.ok) {
-    return NextResponse.json({ error: `Tunggu ${cd.remainingSeconds} detik lagi sebelum submit berikutnya`, cooldownRemainingSeconds: cd.remainingSeconds }, { status: 429 });
+  // Klaim slot cooldown ATOMIK (cegah klik ganda mengajukan 2 pengajuan sekaligus); dilepas lagi
+  // kalau penyimpanan pengajuan gagal.
+  const claim = await claimSubmitSlot(auth.session);
+  if (!claim.ok) {
+    return NextResponse.json({ error: `Tunggu ${claim.remainingSeconds} detik lagi sebelum submit berikutnya`, cooldownRemainingSeconds: claim.remainingSeconds }, { status: 429 });
   }
 
   const { data, error } = await db.from('pending_approvals').insert({
@@ -117,7 +119,10 @@ export async function POST(req) {
     status: 'pending'
   }).select().single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    await releaseSubmitSlot(claim);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
 
   await logAudit(auth.session, 'AJUKAN_ANOMALI', { target, waktu, tanggal: form.tanggal, reason, catatan: catatan.trim() });
 
@@ -136,7 +141,6 @@ export async function POST(req) {
     approvalUrl: `${process.env.APP_URL || ''}/approval`
   });
 
-  await markSubmitted(auth.session.id);
   const cooldownMinutes = await getCooldownMinutes();
   return NextResponse.json({ ok: true, id: data.id, waSent: n8n.ok, warn: n8n.warn || null, cooldownSeconds: cooldownMinutes * 60 });
 }

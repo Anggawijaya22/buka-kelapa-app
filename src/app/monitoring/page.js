@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Nav from '@/lib/Nav';
 import ProductionFormFields, { emptyPh, phFromPayload, phToPayload, validateProductionForm } from '@/lib/ProductionFormFields';
 import CooldownNotice from '@/lib/CooldownNotice';
@@ -80,6 +80,9 @@ function EditForm({ item, cooldown, onSaved, onCancel }) {
   const { modal: resultModal, showSuccess, showError } = useResultModal();
   const { modal: confirmModal, confirm: askKirimConfirm } = useConfirm();
   const [anomaliModal, confirmAnomali] = useAnomaliConfirm();
+  // Penjaga klik ganda utk "Kirim Data"/"Simpan Perubahan": state `saving` baru menyala setelah
+  // cek anomali (ada await fetch), ref ini menyala seketika.
+  const sending = useRef(false);
 
   function set(field, value) { setForm(f => ({ ...f, [field]: value })); }
   function setPhField(line, key, value) { setPh(p => ({ ...p, [line]: { ...p[line], [key]: value } })); }
@@ -183,22 +186,27 @@ function EditForm({ item, cooldown, onSaved, onCancel }) {
   // Dipakai baik oleh "Kirim Data" (draft) maupun "Simpan Perubahan" (record yang sudah pernah
   // dikirim) — keduanya sama-sama harus dicek anomali dulu sebelum benar-benar kirim ke Excel/WA.
   function kirimAtauKirimUlang() {
-    if (cooldown.remaining > 0) return;
+    if (cooldown.remaining > 0 || sending.current) return;
     validateThenRun(async () => {
-      const payload = buildPayload();
-      const deteksi = isRekap ? await detectRekapAnomali() : detectShiftAnomali(payload);
+      sending.current = true;
+      try {
+        const payload = buildPayload();
+        const deteksi = isRekap ? await detectRekapAnomali() : detectShiftAnomali(payload);
 
-      if (deteksi.anomali) {
-        const pesan = `${deteksi.reason}\n\nAnda bisa:\n• Tetap Kirim — data akan dikirim ke Viewer untuk di-ACC dulu sebelum masuk Excel\n• Revisi Data — kembali mengecek isian form`;
-        const konfirmasi = await confirmAnomali(pesan);
-        if (!konfirmasi.confirmed) return; // Revisi — kembali ke form, tidak ada yang dikirim
-        await kirimKeApproval(payload, deteksi, konfirmasi.catatan);
-        return;
+        if (deteksi.anomali) {
+          const pesan = `${deteksi.reason}\n\nAnda bisa:\n• Tetap Kirim — data akan dikirim ke Viewer untuk di-ACC dulu sebelum masuk Excel\n• Revisi Data — kembali mengecek isian form`;
+          const konfirmasi = await confirmAnomali(pesan);
+          if (!konfirmasi.confirmed) return; // Revisi — kembali ke form, tidak ada yang dikirim
+          await kirimKeApproval(payload, deteksi, konfirmasi.catatan);
+          return;
+        }
+
+        const yakin = await askKirimConfirm('Yakin kirim data?');
+        if (!yakin) return;
+        await doSave(true);
+      } finally {
+        sending.current = false;
       }
-
-      const yakin = await askKirimConfirm('Yakin kirim data?');
-      if (!yakin) return;
-      doSave(true);
     });
   }
 

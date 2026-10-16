@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { logAudit } from '@/lib/db';
 import { triggerN8n } from '@/lib/n8n';
-import { checkCooldown, markSubmitted } from '@/lib/cooldown';
+import { claimSubmitSlot, releaseSubmitSlot } from '@/lib/cooldown';
 import { getCooldownMinutes } from '@/lib/settings';
 import { executeShiftLibur } from '@/lib/submitFlow';
 
@@ -35,9 +35,11 @@ export async function POST(req) {
     }
   }
 
-  const cd = await checkCooldown(auth.session);
-  if (!cd.ok) {
-    return NextResponse.json({ error: `Tunggu ${cd.remainingSeconds} detik lagi sebelum submit berikutnya`, cooldownRemainingSeconds: cd.remainingSeconds }, { status: 429 });
+  // Klaim slot cooldown ATOMIK (cegah klik ganda mengirim notifikasi/mengosongkan Excel dua kali);
+  // dilepas lagi di setiap jalur gagal di bawah supaya user bisa langsung coba ulang.
+  const claim = await claimSubmitSlot(auth.session);
+  if (!claim.ok) {
+    return NextResponse.json({ error: `Tunggu ${claim.remainingSeconds} detik lagi sebelum submit berikutnya`, cooldownRemainingSeconds: claim.remainingSeconds }, { status: 429 });
   }
 
   if (isRekap) {
@@ -47,9 +49,9 @@ export async function POST(req) {
     await logAudit(auth.session, 'KIRIM_LIBUR', { target, waktu: null, tanggal });
 
     if (!n8n.ok) {
+      await releaseSubmitSlot(claim);
       return NextResponse.json({ error: n8n.warn }, { status: 500 });
     }
-    await markSubmitted(auth.session.id);
     const cooldownMinutes = await getCooldownMinutes();
     return NextResponse.json({ ok: true, cooldownSeconds: cooldownMinutes * 60 });
   }
@@ -60,13 +62,14 @@ export async function POST(req) {
   try {
     result = await executeShiftLibur({ target, waktu, tanggalDisplay: tanggal, actorSession: auth.session });
   } catch (e) {
+    await releaseSubmitSlot(claim);
     return NextResponse.json({ error: e.message || 'Gagal mengosongkan data Excel' }, { status: 500 });
   }
 
   if (!result.waSent) {
+    await releaseSubmitSlot(claim);
     return NextResponse.json({ error: result.warn }, { status: 500 });
   }
-  await markSubmitted(auth.session.id);
   const cooldownMinutes = await getCooldownMinutes();
   return NextResponse.json({ ok: true, cooldownSeconds: cooldownMinutes * 60 });
 }
